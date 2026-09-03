@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:pos/core/helpers/notify.dart';
 import 'package:intl/intl.dart';
 import 'package:pos/core/routes/paths.dart';
 import 'package:pos/custom_widgets/custom_left_drawer/custom_left_drawer.dart';
@@ -19,7 +20,6 @@ class HomeScreenView extends StatefulWidget {
   State<HomeScreenView> createState() => _HomeScreenViewState();
 }
 
-
 class _HomeScreenViewState extends State<HomeScreenView> {
   final HomeSceenController controller = Get.find();
   final SettingsController settingsController = Get.find();
@@ -33,11 +33,26 @@ class _HomeScreenViewState extends State<HomeScreenView> {
     _barcodeController.addListener(_onBarcodeChanged);
   }
 
+  /// A hardware scanner types a whole code in a few milliseconds and usually
+  /// ends with a newline. A person types slowly and presses Enter.
+  ///
+  /// Auto-submitting after a 220 ms pause meant a cashier keying in a code by
+  /// hand had it snatched away mid-entry, cleared, and reported "not found"
+  /// on every partial code. Only a scanner-speed burst is submitted on its
+  /// own; anything typed by hand waits for Enter.
+  static const Duration _scanBurstWindow = Duration(milliseconds: 120);
+  static const int _minScanLength = 4;
+  DateTime? _firstKeystrokeAt;
+
   void _onBarcodeChanged() {
     _scanDebounce?.cancel();
 
     final raw = _barcodeController.text;
-    if (raw.isEmpty) return;
+    if (raw.isEmpty) {
+      _firstKeystrokeAt = null;
+      return;
+    }
+    _firstKeystrokeAt ??= DateTime.now();
 
     if (raw.contains('\n') || raw.contains('\r')) {
       final code = raw.replaceAll(RegExp(r'[\r\n]'), '').trim();
@@ -45,9 +60,15 @@ class _HomeScreenViewState extends State<HomeScreenView> {
       return;
     }
 
-    _scanDebounce = Timer(const Duration(milliseconds: 220), () {
+    final startedAt = _firstKeystrokeAt;
+    _scanDebounce = Timer(_scanBurstWindow, () {
       final code = _barcodeController.text.trim();
-      if (code.isNotEmpty) _processScannedCode(code);
+      if (code.length < _minScanLength || startedAt == null) return;
+      final typedIn = DateTime.now().difference(startedAt);
+      // Faster than a human could have typed it: treat it as a scan.
+      if (typedIn <= _scanBurstWindow * 2) {
+        _processScannedCode(code);
+      }
     });
   }
 
@@ -56,16 +77,11 @@ class _HomeScreenViewState extends State<HomeScreenView> {
 
     final found = controller.findAndAddByBarcode(code);
     _barcodeController.clear();
+    _firstKeystrokeAt = null;
     _barcodeFocus.requestFocus();
 
-    if (found) {
-    } else {
-      Get.snackbar(
-        'Not found',
-        'No product matches the scanned code',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red[300],
-      );
+    if (!found) {
+      Notify.error('Not found', 'No product matches the scanned code');
     }
   }
 
@@ -94,19 +110,19 @@ class _HomeScreenViewState extends State<HomeScreenView> {
           ),
         ],
       ),
-
-
       drawer: CustomLeftDrawer(
         items: [
           'Item Management',
           'Stock',
           'Clients',
+          'Sales History',
         ],
         onItemTap: [
           () => Get.toNamed(Paths.addEditItemScreen,
               arguments: controller.selectedCategory.value),
           () => Get.toNamed(Paths.itemListingScreen),
           () => Get.toNamed(Paths.clients),
+          () => Get.toNamed(Paths.salesListingScreen),
         ],
       ),
       body: Row(
@@ -176,38 +192,36 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                     ),
                   ),
                 ),
-
                 Expanded(
-                  child: Expanded(
-                    child: Obx(
-                      () => GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: controller.filteredProducts.length,
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 6,
-                          mainAxisSpacing: 8,
-                          crossAxisSpacing: 8,
-                          childAspectRatio: 1.25,
-                        ),
-                        itemBuilder: (context, index) {
-                          final p = controller.filteredProducts[index];
-                          return ProductCard(
-                            productName: p.description ?? '',
-                            price: p.sellingPrice ?? 0,
-                            onAddToCart: () => controller.addToCart(p),
-                            onLongPress: () =>
-                                _showDeleteProductDialog(context, p),
-                          );
-                        },
+                  child: Obx(
+                    () => GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: controller.filteredProducts.length,
+                      // Six fixed columns squeezed the tiles to nothing on
+                      // any window narrower than a full-size tablet.
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 180,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        childAspectRatio: 1.25,
                       ),
+                      itemBuilder: (context, index) {
+                        final p = controller.filteredProducts[index];
+                        return ProductCard(
+                          productName: p.description ?? '',
+                          price: p.sellingPrice ?? 0,
+                          onAddToCart: () => controller.addToCart(p),
+                          onLongPress: () =>
+                              _showDeleteProductDialog(context, p),
+                        );
+                      },
                     ),
                   ),
                 ),
               ],
             ),
           ),
-
           Container(
             width: 400,
             color: Colors.grey[100],
@@ -222,17 +236,16 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                     textInputAction: TextInputAction.done,
                     autofocus: true,
                     decoration: InputDecoration(
-                      hintText: 'Scan barcode here',
-                      prefixIcon: const Icon(Icons.qr_code_scanner),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      isDense: true,
-                      filled: true,
-                      fillColor: Colors.white,
-                      hintStyle: Styles.hintTextStyle,
-                      labelStyle: Styles.labelTextStyle
-                    ),
+                        hintText: 'Scan barcode here',
+                        prefixIcon: const Icon(Icons.qr_code_scanner),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        hintStyle: Styles.hintTextStyle,
+                        labelStyle: Styles.labelTextStyle),
                     onSubmitted: (value) {
                       final code = value.trim();
                       if (code.isNotEmpty) _processScannedCode(code);
@@ -288,13 +301,52 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                 PosButton(
                   text: 'Checkout',
                   icon: Icons.shopping_cart_checkout,
-                  backgroundColor: Colors.blue,
-                  onPressed: () => Get.toNamed(Paths.checkout, arguments: controller.cart),
+                  onPressed: () {
+                    if (controller.cart.isEmpty) {
+                      Notify.error('Empty cart', 'Add an item first');
+                      return;
+                    }
+                    Get.toNamed(Paths.checkout, arguments: controller.cart);
+                  },
                 ),
-
+                const SizedBox(height: 8),
+                // A cashier needs to be able to abandon a basket; clearCart()
+                // existed but nothing on screen called it.
+                Obx(
+                  () => TextButton.icon(
+                    onPressed: controller.cart.isEmpty
+                        ? null
+                        : () => _confirmClearCart(context),
+                    icon: const Icon(Icons.remove_shopping_cart),
+                    label: const Text('Clear cart'),
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearCart(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear cart'),
+        content: const Text('Remove every item from the current sale?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () {
+              controller.clearCart();
+              Navigator.of(context).pop();
+            },
+            child: const Text('Clear'),
           ),
         ],
       ),
@@ -343,7 +395,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
           TextButton(
             onPressed: () {
               if (productsInCategory.isNotEmpty) {
-                Navigator.of(context).pop(); 
+                Navigator.of(context).pop();
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(

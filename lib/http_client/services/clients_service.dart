@@ -1,20 +1,20 @@
 import 'package:flutter/widgets.dart';
 import 'package:pos/http_client/local_storage/hive_service.dart';
 import 'package:pos/http_client/services/sales_service.dart';
+import 'package:uuid/uuid.dart';
 
 class ClientsService {
+  static const String _clientsKey = 'clients';
+  static const Uuid _uuid = Uuid();
 
   static List<Map<String, dynamic>> getAllClients() {
     try {
-      final clients = HiveService.getValue('clients') ?? [];
-      return List<Map<String, dynamic>>.from(clients);
+      return HiveService.getClientMapList(_clientsKey);
     } catch (e) {
       debugPrint('Error getting clients: $e');
       return [];
     }
   }
-
-
 
   static Map<String, dynamic>? getClientById(String clientId) {
     try {
@@ -23,11 +23,11 @@ class ClientsService {
         (client) => client['id'] == clientId,
         orElse: () => <String, dynamic>{},
       );
-      
+
       if (client.isEmpty) {
         return null;
       }
-      
+
       return client;
     } catch (e) {
       debugPrint('Error getting client: $e');
@@ -35,20 +35,33 @@ class ClientsService {
     }
   }
 
-  static Future<void> addClient(String name, String phone) async {
+  /// Returns the new client's id, or null if the input was not usable.
+  ///
+  /// A customer with no name cannot be picked off the tab list later, so an
+  /// empty name is refused rather than stored.
+  static Future<String?> addClient(String name, String phone) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      debugPrint('Refusing to add a client with no name');
+      return null;
+    }
     try {
+      // A millisecond timestamp collides whenever two customers are added in
+      // the same millisecond, and every later edit or delete then hits both.
+      final id = _uuid.v4();
       final newClient = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(),
-        'name': name,
-        'phone': phone,
-        'createdDate': DateTime.now().toString(),
+        'id': id,
+        'name': trimmedName,
+        'phone': phone.trim(),
+        'createdDate': DateTime.now().toIso8601String(),
         'status': 'active',
       };
 
       final clients = getAllClients();
       clients.add(newClient);
 
-      await HiveService.setValue('clients', clients);
+      await HiveService.setClientValue(_clientsKey, clients);
+      return id;
     } catch (e) {
       debugPrint('Error adding client: $e');
       rethrow;
@@ -67,12 +80,12 @@ class ClientsService {
       if (index != -1) {
         clients[index] = {
           ...clients[index],
-          'name': name,
-          'phone': phone,
-          'updatedDate': DateTime.now().toString(),
+          'name': name.trim(),
+          'phone': phone.trim(),
+          'updatedDate': DateTime.now().toIso8601String(),
         };
 
-        await HiveService.setValue('clients', clients);
+        await HiveService.setClientValue(_clientsKey, clients);
       }
     } catch (e) {
       debugPrint('Error updating client: $e');
@@ -85,7 +98,7 @@ class ClientsService {
       final clients = getAllClients();
       clients.removeWhere((client) => client['id'] == clientId);
 
-      await HiveService.setValue('clients', clients);
+      await HiveService.setClientValue(_clientsKey, clients);
     } catch (e) {
       debugPrint('Error deleting client: $e');
       rethrow;
@@ -97,9 +110,9 @@ class ClientsService {
       final tabsMap = SalesService.getClientTabs(clientId);
       double totalBalance = 0.0;
 
-      for (var tabData in tabsMap.values) {
-        if (tabData is Map<String, dynamic> && tabData['status'] == 'open') {
-          totalBalance += (tabData['totalUSD'] ?? 0.0) as double;
+      for (final tabData in tabsMap.values) {
+        if (tabData is Map && tabData['status'] == 'open') {
+          totalBalance += _toDouble(tabData['totalUSD']);
         }
       }
       return totalBalance;
@@ -111,8 +124,7 @@ class ClientsService {
 
   static List<Map<String, dynamic>> getClientPaymentHistory(String clientId) {
     try {
-      final history = HiveService.getValue('client_${clientId}_history') ?? [];
-      return List<Map<String, dynamic>>.from(history);
+      return HiveService.getClientMapList(_historyKey(clientId));
     } catch (e) {
       debugPrint('Error getting payment history: $e');
       return [];
@@ -127,10 +139,10 @@ class ClientsService {
       final history = getClientPaymentHistory(clientId);
       history.add({
         ...payment,
-        'date': DateTime.now().toString(),
+        'date': DateTime.now().toIso8601String(),
       });
 
-      await HiveService.setValue('client_${clientId}_history', history);
+      await HiveService.setClientValue(_historyKey(clientId), history);
     } catch (e) {
       debugPrint('Error adding payment to history: $e');
       rethrow;
@@ -144,8 +156,8 @@ class ClientsService {
 
       return clients
           .where((client) =>
-              (client['name'] ?? '').toLowerCase().contains(lowerQuery) ||
-              (client['phone'] ?? '').toLowerCase().contains(lowerQuery))
+              '${client['name'] ?? ''}'.toLowerCase().contains(lowerQuery) ||
+              '${client['phone'] ?? ''}'.toLowerCase().contains(lowerQuery))
           .toList();
     } catch (e) {
       debugPrint('Error searching clients: $e');
@@ -159,10 +171,10 @@ class ClientsService {
       int openTabsCount = 0;
       double totalOwed = 0.0;
 
-      for (var tabData in tabsMap.values) {
-        if (tabData is Map<String, dynamic> && tabData['status'] == 'open') {
+      for (final tabData in tabsMap.values) {
+        if (tabData is Map && tabData['status'] == 'open') {
           openTabsCount++;
-          totalOwed += (tabData['totalUSD'] ?? 0.0) as double;
+          totalOwed += _toDouble(tabData['totalUSD']);
         }
       }
       final totalTabsCount = tabsMap.length;
@@ -182,5 +194,14 @@ class ClientsService {
         'closedTabs': 0,
       };
     }
+  }
+
+  static String _historyKey(String clientId) => 'client_${clientId}_history';
+
+  /// Hive returns whatever type was written — an int for a whole-dollar total,
+  /// a String once the value has been through an Excel import.
+  static double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0.0;
   }
 }

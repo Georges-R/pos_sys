@@ -1,5 +1,3 @@
-
-
 import 'package:get/get.dart';
 import 'package:pos/modules/settings/controller/settings_controller.dart';
 import 'package:pos/modules/clients/controller/clients_controller.dart';

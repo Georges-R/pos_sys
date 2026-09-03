@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:pos/core/helpers/notify.dart';
 import 'package:pos/modules/clients/controller/clients_controller.dart';
 
 class CustomerSelectorDialog extends StatefulWidget {
@@ -12,13 +13,17 @@ class CustomerSelectorDialog extends StatefulWidget {
 class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
   final TextEditingController _searchController = TextEditingController();
   final ClientsController _clientsController = Get.find<ClientsController>();
-  final RxList<Map<String, dynamic>> _searchResults = <Map<String, dynamic>>[].obs;
+  final RxList<Map<String, dynamic>> _searchResults =
+      <Map<String, dynamic>>[].obs;
   final RxBool _isSearching = false.obs;
 
   @override
   void initState() {
     super.initState();
-    _searchResults.assignAll(_clientsController.clients);
+    // Go through the same path a search does, so the outstanding balance is
+    // attached from the start. Opening the dialog used to show every customer
+    // with no balance, letting the cashier extend credit blind.
+    _searchClients('');
   }
 
   @override
@@ -27,19 +32,21 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
     super.dispose();
   }
 
-
-
   void _searchClients(String query) {
     if (query.isEmpty) {
-
       final clientsWithBalance = _clientsController.clients.map((client) {
         if (client.isEmpty) {
-          return <String, dynamic>{'id': '', 'name': 'Invalid Client', 'balance': 0.0};
+          return <String, dynamic>{
+            'id': '',
+            'name': 'Invalid Client',
+            'balance': 0.0
+          };
         }
-        
+
         final clientWithBalance = Map<String, dynamic>.from(client);
         final clientId = client['id'] as String? ?? '';
-        clientWithBalance['balance'] = _clientsController.getClientBalance(clientId);
+        clientWithBalance['balance'] =
+            _clientsController.getClientBalance(clientId);
         return clientWithBalance;
       }).toList();
       _searchResults.assignAll(clientsWithBalance);
@@ -52,12 +59,17 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
 
       final resultsWithBalance = results.map((client) {
         if (client.isEmpty) {
-          return <String, dynamic>{'id': '', 'name': 'Invalid Client', 'balance': 0.0};
+          return <String, dynamic>{
+            'id': '',
+            'name': 'Invalid Client',
+            'balance': 0.0
+          };
         }
-        
+
         final clientWithBalance = Map<String, dynamic>.from(client);
         final clientId = client['id'] as String? ?? '';
-        clientWithBalance['balance'] = _clientsController.getClientBalance(clientId);
+        clientWithBalance['balance'] =
+            _clientsController.getClientBalance(clientId);
         return clientWithBalance;
       }).toList();
       _searchResults.assignAll(resultsWithBalance);
@@ -106,19 +118,19 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
               final phone = phoneController.text.trim();
 
               if (name.isEmpty) {
-                Get.snackbar('Error', 'Please enter client name');
+                Notify.error('Error', 'Please enter client name');
                 return;
               }
 
               try {
                 await _clientsController.addNewClient(name, phone);
                 Get.back();
-                
+
                 _searchClients(_searchController.text);
-                
-                Get.snackbar('Success', 'Client added successfully');
+
+                Notify.success('Success', 'Client added successfully');
               } catch (e) {
-                Get.snackbar('Error', 'Failed to add client: $e');
+                Notify.error('Error', 'Failed to add client: $e');
               }
             },
             child: const Text('Add'),
@@ -157,7 +169,6 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
               ),
             ),
             const Divider(),
-            
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: TextField(
@@ -172,7 +183,6 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
                 textInputAction: TextInputAction.search,
               ),
             ),
-            
             Obx(() {
               if (_isSearching.value) {
                 return const Padding(
@@ -181,7 +191,10 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
                 );
               }
 
-              if (_searchResults.isEmpty && _searchController.text.isNotEmpty) {
+              // Also covers a shop with no customers yet: this used to be
+              // gated on a non-empty search box, so the very first customer
+              // could never be created from here.
+              if (_searchResults.isEmpty) {
                 return Expanded(
                   child: Center(
                     child: Column(
@@ -221,19 +234,18 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
               }
 
               return Expanded(
-
                 child: ListView.builder(
                   itemCount: _searchResults.length,
                   itemBuilder: (context, index) {
                     final client = _searchResults[index];
-                    
+
                     if (client.isEmpty) {
                       return const ListTile(
                         title: Text('Invalid Client Data'),
                         subtitle: Text('Client information is missing'),
                       );
                     }
-                    
+
                     final clientName = client['name'] as String? ?? 'Unknown';
                     final clientPhone = client['phone'] as String? ?? '';
                     final clientBalance = client['balance'] as double? ?? 0.0;
@@ -242,14 +254,15 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
                     return ListTile(
                       leading: CircleAvatar(
                         child: Text(
-                          clientName.isNotEmpty ? clientName[0].toUpperCase() : '?',
+                          clientName.isNotEmpty
+                              ? clientName[0].toUpperCase()
+                              : '?',
                         ),
                       ),
                       title: Text(clientName),
-                      subtitle: clientPhone.isNotEmpty 
-                          ? Text(clientPhone) 
-                          : null,
-                      trailing: clientBalance > 0 
+                      subtitle:
+                          clientPhone.isNotEmpty ? Text(clientPhone) : null,
+                      trailing: clientBalance > 0
                           ? Text(
                               '\$${clientBalance.toStringAsFixed(2)}',
                               style: const TextStyle(
@@ -270,7 +283,6 @@ class _CustomerSelectorDialogState extends State<CustomerSelectorDialog> {
                 ),
               );
             }),
-            
             const SizedBox(height: 16),
           ],
         ),

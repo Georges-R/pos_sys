@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:pos/core/helpers/notify.dart';
 import '../controller/clients_controller.dart';
 
 class ClientsView extends GetView<ClientsController> {
@@ -105,17 +106,21 @@ class ClientsView extends GetView<ClientsController> {
                                   children: [
                                     _buildStatCard(
                                       'Total Tabs',
-                                      (controller.clientStats['totalTabs'] ?? 0)
+                                      (controller.statsOf(
+                                                  clientId)['totalTabs'] ??
+                                              0)
                                           .toString(),
                                     ),
                                     _buildStatCard(
                                       'Open Tabs',
-                                      (controller.clientStats['openTabs'] ?? 0)
+                                      (controller.statsOf(
+                                                  clientId)['openTabs'] ??
+                                              0)
                                           .toString(),
                                     ),
                                     _buildStatCard(
                                       'Total Owed',
-                                      '\$${(controller.clientStats['totalOwed'] ?? 0.0).toStringAsFixed(2)}',
+                                      '\$${(controller.statsOf(clientId)['totalOwed'] ?? 0.0).toStringAsFixed(2)}',
                                     ),
                                   ],
                                 ),
@@ -123,19 +128,26 @@ class ClientsView extends GetView<ClientsController> {
                                 const Divider(),
                                 const SizedBox(height: 8),
                                 // Tabs List
-                                if (controller.clientTabs.isEmpty)
+                                if (controller.tabsOf(clientId).isEmpty)
                                   const Text('No open tabs')
                                 else
                                   ListView.builder(
                                     shrinkWrap: true,
                                     physics:
                                         const NeverScrollableScrollPhysics(),
-                                    itemCount: controller.clientTabs.length,
+                                    itemCount:
+                                        controller.tabsOf(clientId).length,
                                     itemBuilder: (context, tabIndex) {
-                                      final values =
-                                          controller.clientTabs.values.toList();
+                                      final values = controller
+                                          .tabsOf(clientId)
+                                          .values
+                                          .toList();
 
-                                      final tab = values[index];
+                                      // This used to index with the client's
+                                      // row number, which showed the wrong tab
+                                      // and crashed for every client past the
+                                      // first.
+                                      final tab = values[tabIndex];
 
                                       if (tab == null) {
                                         return const Card(
@@ -152,7 +164,7 @@ class ClientsView extends GetView<ClientsController> {
                                           title: Text(
                                               'Tab #${tab['id'] ?? 'Unknown'}'),
                                           subtitle: Text(
-                                            'Total: \$${(tab['totalUSD'] ?? 0.0).toStringAsFixed(2)} (${(tab['totalLBP'] ?? 0.0).toStringAsFixed(0)} LBP)\nCreated: ${tab['createdDate'] ?? 'Unknown'}',
+                                            'Total: \$${(tab['totalUSD'] ?? 0.0).toStringAsFixed(2)} (${(tab['totalLBP'] ?? 0.0).toStringAsFixed(0)} LBP)\nCreated: ${tab['date'] ?? 'Unknown'}',
                                           ),
                                           isThreeLine: true,
                                           trailing: PopupMenuButton(
@@ -253,7 +265,7 @@ class ClientsView extends GetView<ClientsController> {
                 );
                 Get.back();
               } else {
-                Get.snackbar('Error', 'Please enter client name');
+                Notify.error('Error', 'Please enter client name');
               }
             },
             child: const Text('Add'),

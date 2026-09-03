@@ -16,7 +16,6 @@ class CheckoutView extends GetView<CheckoutController> {
       body: Column(
         children: [
           Expanded(
-            flex: 5,
             child: Obx(
               () => controller.cartItems.isEmpty
                   ? const Center(child: Text('No items in cart'))
@@ -49,66 +48,89 @@ class CheckoutView extends GetView<CheckoutController> {
           ),
           const Divider(),
           // Totals Section
-          Expanded(
-            child: Obx(
-              () => Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+          Obx(
+            () => Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Subtotal:', style: TextStyle(fontSize: 18)),
+                      Text(
+                        '${NumberFormat('#,##0.00').format(controller.subtotalUSD.value)} \$',
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ],
+                  ),
+                  if (controller.tva.value > 0)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Total (USD):',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        Text(
+                          'VAT (${NumberFormat('#,##0.##').format(controller.tva.value)}%):',
+                          style: const TextStyle(fontSize: 18),
                         ),
                         Text(
-                          '${NumberFormat('#,##0.00').format(controller.totalUSD.value)} \$',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          '${NumberFormat('#,##0.00').format(controller.tvaAmountUSD.value)} \$',
+                          style: const TextStyle(fontSize: 18),
                         ),
                       ],
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total (LBP):',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                          ),
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total (USD):',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
                         ),
-                        Text(
-                          '${NumberFormat('#,###').format(controller.totalLBP.value)} LBP',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      ),
+                      Text(
+                        '${NumberFormat('#,##0.00').format(controller.totalUSD.value)} \$',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
-                    ),
-                    // Row(
-                    //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    //   children: [
-                    //     const Text('Remaining:'),
-                    //     Text(
-                    //       '\$${controller.remainingAmount.value.toStringAsFixed(2)}',
-                    //       style: const TextStyle(
-                    //         fontWeight: FontWeight.bold,
-                    //         color: Colors.green,
-                    //       ),
-                    //     ),
-                    //   ],
-                    // ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total (LBP):',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '${NumberFormat('#,###').format(controller.totalLBP.value)} LBP',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Row(
+                  //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //   children: [
+                  //     const Text('Remaining:'),
+                  //     Text(
+                  //       '\$${controller.remainingAmount.value.toStringAsFixed(2)}',
+                  //       style: const TextStyle(
+                  //         fontWeight: FontWeight.bold,
+                  //         color: Colors.green,
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
+                ],
               ),
             ),
           ),

@@ -10,6 +10,7 @@ class HiveService {
   static Future<void> init() async {
     await Hive.initFlutter();
     await _openBoxes();
+    await migrateClientDataOutOfSalesBox();
   }
 
   static Future<void> _openBoxes() async {
@@ -20,7 +21,8 @@ class HiveService {
     await Hive.openBox(_salesBox);
   }
 
-  static Future<void> storeData(String boxName, String key, dynamic value) async {
+  static Future<void> storeData(
+      String boxName, String key, dynamic value) async {
     final box = Hive.box(boxName);
     await box.put(key, value);
   }
@@ -57,17 +59,30 @@ class HiveService {
 
   static Map<String, dynamic> getBox(String boxName) {
     final box = Hive.box(boxName);
-    return Map<String, dynamic>.from(box.toMap());
+    return box.toMap().map<String, dynamic>(
+        (key, dynamic value) => MapEntry(key.toString(), normalize(value)));
   }
 
-  static Future<void> setValue(String key, dynamic value) async {
-    await storeData(_salesBox, key, value);
+  /// Hive hands back `Map<dynamic, dynamic>` / `List<dynamic>` once a value
+  /// has been through a disk round trip, which every `Map<String, dynamic>`
+  /// cast downstream then trips over. Normalising on read keeps the rest of
+  /// the app working with the shapes it was written with.
+  static dynamic normalize(dynamic value) {
+    if (value is Map) {
+      return value.map<String, dynamic>(
+          (key, dynamic v) => MapEntry(key.toString(), normalize(v)));
+    }
+    if (value is List) {
+      return value.map<dynamic>(normalize).toList();
+    }
+    return value;
   }
 
-  static dynamic getValue(String key) {
-    return getData(_salesBox, key);
+  static List<Map<String, dynamic>> getMapList(String boxName, String key) {
+    final raw = normalize(getData(boxName, key));
+    if (raw is! List) return <Map<String, dynamic>>[];
+    return raw.whereType<Map<String, dynamic>>().toList();
   }
-
 
   static Future<void> storeUserData(String key, dynamic value) async {
     await storeData(_userBox, key, value);
@@ -98,11 +113,25 @@ class HiveService {
   }
 
   static dynamic getClient(String key) {
-    return getData(_clientsBox, key);
+    return normalize(getData(_clientsBox, key));
   }
 
   static List<dynamic> getAllClients() {
     return getAllValues(_clientsBox);
+  }
+
+  /// Client-scoped storage. These used to share the sales box, which put the
+  /// customer book and its payment history inside the sales ledger.
+  static Future<void> setClientValue(String key, dynamic value) async {
+    await storeData(_clientsBox, key, value);
+  }
+
+  static dynamic getClientValue(String key) {
+    return normalize(getData(_clientsBox, key));
+  }
+
+  static List<Map<String, dynamic>> getClientMapList(String key) {
+    return getMapList(_clientsBox, key);
   }
 
   static Future<void> storeSale(String key, dynamic value) async {
@@ -110,15 +139,36 @@ class HiveService {
   }
 
   static dynamic getSale(String key) {
-    return getData(_salesBox, key);
+    return normalize(getData(_salesBox, key));
   }
 
   static List<dynamic> getAllSales() {
     return getAllValues(_salesBox);
   }
 
-  static Future<void> deleteValue(String key) async {
+  static Future<void> deleteSale(String key) async {
     await deleteData(_salesBox, key);
+  }
+
+  /// One-off cleanup for installs created before clients had their own box:
+  /// the customer book and payment history were written into the sales box,
+  /// where every sales report then read them as if they were sales.
+  static Future<void> migrateClientDataOutOfSalesBox() async {
+    final sales = Hive.box(_salesBox);
+    final clientsBox = Hive.box(_clientsBox);
+    final strayKeys = sales.keys
+        .where((key) =>
+            key == 'clients' ||
+            (key is String &&
+                key.startsWith('client_') &&
+                key.endsWith('_history')))
+        .toList();
+    for (final key in strayKeys) {
+      if (!clientsBox.containsKey(key)) {
+        await clientsBox.put(key, sales.get(key));
+      }
+      await sales.delete(key);
+    }
   }
 
   static Future<void> close() async {

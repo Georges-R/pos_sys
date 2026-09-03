@@ -66,7 +66,7 @@ class _FormInputFieldState extends State<FormInputField> {
   List<TextInputFormatter> _getDefaultFormatters() {
     if (widget.keyboardType == TextInputType.number) {
       if (widget.allowDecimal) {
-        return [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$'))];
+        return [_DecimalInputFormatter()];
       } else {
         return [FilteringTextInputFormatter.digitsOnly];
       }
@@ -197,5 +197,28 @@ class _FormInputFieldState extends State<FormInputField> {
         ),
       ],
     );
+  }
+}
+
+/// Rejects an edit that would leave a non-numeric value, keeping what was
+/// already typed.
+///
+/// The previous formatter was `FilteringTextInputFormatter.allow` with an
+/// anchored pattern. That filter keeps only the matching parts of the string,
+/// and an anchored pattern matches nothing once a stray character is present
+/// — so one bad keystroke erased the whole field. Typing 89500 and fumbling a
+/// key left the rate at 500.
+class _DecimalInputFormatter extends TextInputFormatter {
+  static final RegExp _decimal = RegExp(r'^\d*\.?\d*$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty || _decimal.hasMatch(newValue.text)) {
+      return newValue;
+    }
+    return oldValue;
   }
 }

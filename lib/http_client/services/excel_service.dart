@@ -4,35 +4,70 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:uuid/uuid.dart';
+
+import '../../core/helpers/money.dart';
 import '../local_storage/hive_service.dart';
+import '../local_storage/local_storage_helpers.dart';
+import 'clients_service.dart';
 
 class ExcelService {
+  static const Uuid _uuid = Uuid();
   static const String _settingsSheet = 'Settings';
   static const String _clientsSheet = 'Clients';
   static const String _itemsSheet = 'Items';
   static const String _salesSheet = 'Sales';
 
+  /// Builds the backup workbook from whatever is in storage.
+  ///
+  /// Kept separate from the file write so the round trip can be exercised
+  /// without a filesystem or a file picker.
+  static Future<Excel> buildWorkbook() async {
+    final excel = Excel.createExcel();
+    excel.delete('Sheet1');
+
+    await _exportSettings(excel);
+    await _exportClients(excel);
+    await _exportItems(excel);
+    await _exportSales(excel);
+
+    return excel;
+  }
+
+  /// Applies a backup workbook to storage. Returns false if nothing usable
+  /// was found, so the caller does not report a successful restore.
+  static Future<bool> applyWorkbook(Excel excel) async {
+    final sheets = excel.tables.keys.toSet();
+    if (!sheets.contains(_settingsSheet) &&
+        !sheets.contains(_clientsSheet) &&
+        !sheets.contains(_itemsSheet) &&
+        !sheets.contains(_salesSheet)) {
+      debugPrint('Workbook has none of the expected sheets');
+      return false;
+    }
+
+    if (sheets.contains(_settingsSheet)) await _importSettings(excel);
+    if (sheets.contains(_clientsSheet)) await _importClients(excel);
+    if (sheets.contains(_itemsSheet)) await _importItems(excel);
+    if (sheets.contains(_salesSheet)) await _importSales(excel);
+    return true;
+  }
+
   static Future<String?> exportToExcel() async {
     try {
-      final excel = Excel.createExcel();
-      
-      excel.delete('Sheet1');
-
-      await _exportSettings(excel);
-      
-      await _exportClients(excel);
-      
-      await _exportItems(excel);
-      
-      await _exportSales(excel);
+      final excel = await buildWorkbook();
 
       final directory = await getApplicationDocumentsDirectory();
-      final fileName = 'POS_Backup_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final fileName =
+          'POS_Backup_${DateTime.now().millisecondsSinceEpoch}.xlsx';
       final filePath = '${directory.path}/$fileName';
-      
-      final file = File(filePath);
+
       final bytes = excel.encode();
-      await file.writeAsBytes(bytes!);
+      if (bytes == null) {
+        debugPrint('Excel encoding produced no bytes');
+        return null;
+      }
+      await File(filePath).writeAsBytes(bytes);
 
       return filePath;
     } catch (e) {
@@ -43,28 +78,18 @@ class ExcelService {
 
   static Future<bool> importFromExcel() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
       );
 
-      if (result == null || result.files.isEmpty) {
+      final path = result?.files.single.path;
+      if (path == null) {
         return false;
       }
 
-      final file = File(result.files.single.path!);
-      final bytes = await file.readAsBytes();
-      final excel = Excel.decodeBytes(bytes);
-
-      await _importSettings(excel);
-      
-      await _importClients(excel);
-      
-      await _importItems(excel);
-      
-      await _importSales(excel);
-
-      return true;
+      final bytes = await File(path).readAsBytes();
+      return applyWorkbook(Excel.decodeBytes(bytes));
     } catch (e) {
       debugPrint('Error importing from Excel: $e');
       return false;
@@ -82,13 +107,11 @@ class ExcelService {
 
     try {
       final settingsData = HiveService.getBox('settingsBox');
-      if (settingsData != null) {
-        for (var entry in settingsData.entries) {
-          sheet.appendRow([
-            entry.key.toString(),
-            entry.value?.toString() ?? '',
-          ]);
-        }
+      for (var entry in settingsData.entries) {
+        sheet.appendRow([
+          entry.key.toString(),
+          entry.value?.toString() ?? '',
+        ]);
       }
     } catch (e) {
       debugPrint('Error exporting settings: $e');
@@ -107,12 +130,11 @@ class ExcelService {
       ]);
     }
 
-
     try {
-      final clients = HiveService.getValue('clients');
-      if (clients != null) {
-        for (var client in clients) {
-          if (client is Map<String, dynamic>) {
+      final clients = ClientsService.getAllClients();
+      {
+        for (final client in clients) {
+          {
             sheet.appendRow([
               client['id'] ?? '',
               client['name'] ?? '',
@@ -145,10 +167,12 @@ class ExcelService {
     }
 
     try {
-      final products = HiveService.getValue('products');
-      if (products != null) {
-        for (var product in products) {
-          if (product is Map<String, dynamic>) {
+      final products =
+          LocalStorageHelpers.getJsonList('itemsBox', 'products') ??
+              <Map<String, dynamic>>[];
+      {
+        for (final product in products) {
+          {
             sheet.appendRow([
               product['description'] ?? '',
               product['category'] ?? '',
@@ -164,16 +188,14 @@ class ExcelService {
         }
       }
 
-      final categories = HiveService.getValue('categories');
-      if (categories != null) {
+      final categories =
+          LocalStorageHelpers.getJsonList('itemsBox', 'categories') ??
+              <Map<String, dynamic>>[];
+      if (categories.isNotEmpty) {
         sheet.appendRow([]);
         sheet.appendRow(['Categories:']);
-        for (var category in categories) {
-          if (category is Map<String, dynamic>) {
-            sheet.appendRow([category['name'] ?? '']);
-          } else if (category is String) {
-            sheet.appendRow([category]);
-          }
+        for (final category in categories) {
+          sheet.appendRow([category['name'] ?? '']);
         }
       }
     } catch (e) {
@@ -202,7 +224,7 @@ class ExcelService {
       final salesMap = HiveService.getBox('salesBox');
       for (var entry in salesMap.entries) {
         final sale = entry.value;
-        if (sale is Map<String, dynamic>) {
+        if (sale is Map) {
           sheet.appendRow([
             sale['id'] ?? '',
             sale['type'] ?? '',
@@ -217,7 +239,7 @@ class ExcelService {
           ]);
         }
       }
-        } catch (e) {
+    } catch (e) {
       debugPrint('Error exporting sales: $e');
     }
   }
@@ -236,9 +258,10 @@ class ExcelService {
           if (keyValue != null && valueValue != null) {
             String key = keyValue.toString();
             String valueString = valueValue.toString();
-            
+
             if (key.isNotEmpty) {
-              await HiveService.storeSetting(key, valueString);
+              final number = num.tryParse(valueString);
+              await HiveService.storeSetting(key, number ?? valueString);
             }
           }
         }
@@ -248,30 +271,43 @@ class ExcelService {
     }
   }
 
-
   static Future<void> _importClients(Excel excel) async {
     try {
       final sheet = excel[_clientsSheet];
       if (sheet.rows.isEmpty) return;
 
+      final header = _headerIndex(sheet);
+      if (!_hasColumns(header, ['id', 'name'])) {
+        debugPrint('Clients sheet is missing an ID or Name column; skipping');
+        return;
+      }
+
       final clients = <Map<String, dynamic>>[];
-      
       for (int i = 1; i < sheet.rows.length; i++) {
         final row = sheet.rows[i];
-
-        if (row.length >= 5 && row.every((cell) => cell != null && cell!.value != null)) {
-          final client = {
-            'id': _getCellString(row[0]?.value),
-            'name': _getCellString(row[1]?.value),
-            'phone': _getCellString(row[2]?.value),
-            'createdDate': _getCellString(row[3]?.value),
-            'status': _getCellString(row[4]?.value),
-          };
-          clients.add(client);
-        }
+        final name = _getCellString(_cell(row, header, 'Name'));
+        // Only the name is essential. Requiring every cell to be filled meant
+        // one customer with no phone number was dropped from the import.
+        if (name.isEmpty) continue;
+        final id = _getCellString(_cell(row, header, 'ID'));
+        final status = _getCellString(_cell(row, header, 'Status'));
+        clients.add({
+          'id': id.isEmpty ? _uuid.v4() : id,
+          'name': name,
+          'phone': _getCellString(_cell(row, header, 'Phone')),
+          'createdDate': _getCellString(_cell(row, header, 'Created Date')),
+          'status': status.isEmpty ? 'active' : status,
+        });
       }
-      
-      await HiveService.setValue('clients', clients);
+
+      // An import that parsed nothing must not be allowed to wipe the
+      // customer book and still report success.
+      if (clients.isEmpty && ClientsService.getAllClients().isNotEmpty) {
+        debugPrint('Clients sheet held no usable rows; keeping existing data');
+        return;
+      }
+
+      await HiveService.setClientValue('clients', clients);
     } catch (e) {
       debugPrint('Error importing clients: $e');
     }
@@ -282,42 +318,58 @@ class ExcelService {
       final sheet = excel[_itemsSheet];
       if (sheet.rows.isEmpty) return;
 
+      final header = _headerIndex(sheet);
+      if (!_hasColumns(header, ['description'])) {
+        debugPrint('Items sheet is missing a Description column; skipping');
+        return;
+      }
+
       final products = <Map<String, dynamic>>[];
       final categories = <String>{};
-      
+
       for (int i = 1; i < sheet.rows.length; i++) {
         final row = sheet.rows[i];
         if (row.isEmpty || row.every((cell) => cell?.value == null)) continue;
-        
-        if (row.length == 1 && (row[0]?.value?.toString().contains('Categories:') ?? false)) {
+
+        final description = _getCellString(_cell(row, header, 'Description'));
+        // The export appends a "Categories:" block below the products.
+        if (description.isEmpty || description.startsWith('Categories:')) {
           continue;
         }
-        
 
-        if (row.length >= 9) {
-          final product = {
-            'description': _getCellString(row[0]?.value),
-            'category': _getCellString(row[1]?.value),
-            'barcode': _getCellString(row[2]?.value),
-            'quantity': _parseInt(row[3]?.value?.toString()),
-            'cost_price': _parseDouble(row[4]?.value?.toString()),
-            'tva_percent': _parseDouble(row[5]?.value?.toString()),
-            'price_after_tva': _parseDouble(row[6]?.value?.toString()),
-            'profit_percent': _parseDouble(row[7]?.value?.toString()),
-            'selling_price': _parseDouble(row[8]?.value?.toString()),
-          };
-          
-          if (product['description'].toString().isNotEmpty) {
-            products.add(product);
-            if (product['category'].toString().isNotEmpty) {
-              categories.add(product['category'].toString());
-            }
-          }
-        }
+        final category = _getCellString(_cell(row, header, 'Category'));
+        products.add({
+          'description': description,
+          'category': category,
+          'barcode': _getCellString(_cell(row, header, 'Barcode')),
+          'quantity': _parseInt(_cell(row, header, 'Quantity')?.toString()),
+          'cost_price':
+              _parseDouble(_cell(row, header, 'Cost Price')?.toString()),
+          'tva_percent':
+              _parseDouble(_cell(row, header, 'TVA Percent')?.toString()),
+          'price_after_tva':
+              _parseDouble(_cell(row, header, 'Price After TVA')?.toString()),
+          'profit_percent':
+              _parseDouble(_cell(row, header, 'Profit Percent')?.toString()),
+          'selling_price':
+              _parseDouble(_cell(row, header, 'Selling Price')?.toString()),
+        });
+        if (category.isNotEmpty) categories.add(category);
       }
-      
-      await HiveService.setValue('products', products);
-      await HiveService.setValue('categories', categories.map((c) => {'name': c}).toList());
+
+      final existing =
+          LocalStorageHelpers.getJsonList('itemsBox', 'products') ??
+              const <Map<String, dynamic>>[];
+      if (products.isEmpty && existing.isNotEmpty) {
+        debugPrint('Items sheet held no usable rows; keeping existing catalog');
+        return;
+      }
+
+      // The app reads its catalog from itemsBox as a JSON list; writing it
+      // anywhere else means an import appears to succeed and changes nothing.
+      await LocalStorageHelpers.storeJsonList('itemsBox', 'products', products);
+      await LocalStorageHelpers.storeJsonList('itemsBox', 'categories',
+          categories.map((c) => <String, dynamic>{'name': c}).toList());
     } catch (e) {
       debugPrint('Error importing items: $e');
     }
@@ -328,58 +380,77 @@ class ExcelService {
       final sheet = excel[_salesSheet];
       if (sheet.rows.isEmpty) return;
 
+      final header = _headerIndex(sheet);
+      if (!_hasColumns(header, ['id', 'date'])) {
+        debugPrint('Sales sheet is missing an ID or Date column; skipping');
+        return;
+      }
+
       for (int i = 1; i < sheet.rows.length; i++) {
         final row = sheet.rows[i];
-        if (row.length >= 10 && row.every((cell) => cell?.value != null)) {
-          final sale = {
-            'id': _getCellString(row[0]?.value),
-            'type': _getCellString(row[1]?.value),
-            'clientId': _getCellString(row[2]?.value),
-            'items': _getCellString(row[3]?.value),
-            'totalUSD': _parseDouble(row[4]?.value?.toString()),
-            'totalLBP': _parseDouble(row[5]?.value?.toString()),
-            'exchangeRate': _parseDouble(row[6]?.value?.toString()),
-            'tva': _parseDouble(row[7]?.value?.toString()),
-            'date': _getCellString(row[8]?.value),
-            'status': _getCellString(row[9]?.value),
-          };
-          
-          await HiveService.storeSale(sale['id'].toString(), sale);
-        }
+        final id = _getCellString(_cell(row, header, 'ID'));
+        final date = _getCellString(_cell(row, header, 'Date'));
+        // A tab has no status and a cash sale has no client; demanding every
+        // cell be present threw away most of the ledger.
+        if (id.isEmpty || date.isEmpty) continue;
+
+        await HiveService.storeSale(id, {
+          'id': id,
+          'type': _getCellString(_cell(row, header, 'Type')),
+          'clientId': _getCellString(_cell(row, header, 'Client ID')),
+          'items': _getCellString(_cell(row, header, 'Items')),
+          'totalUSD': _parseDouble(_cell(row, header, 'Total USD')?.toString()),
+          'totalLBP': _parseDouble(_cell(row, header, 'Total LBP')?.toString()),
+          'exchangeRate':
+              _parseDouble(_cell(row, header, 'Exchange Rate')?.toString()),
+          'tva': _parseDouble(_cell(row, header, 'TVA')?.toString()),
+          'date': date,
+          'status': _getCellString(_cell(row, header, 'Status')),
+        });
       }
     } catch (e) {
       debugPrint('Error importing sales: $e');
     }
   }
 
-
-
-
-  static dynamic _parseNumericValue(String value) {
-    if (value.isEmpty) return '';
-    
-    final intValue = int.tryParse(value);
-    if (intValue != null) return intValue;
-    
-    final doubleValue = double.tryParse(value);
-    if (doubleValue != null) return doubleValue;
-    
-    return value;
-  }
-
   static double? _parseDouble(String? value) {
     if (value == null || value.isEmpty) return 0.0;
-    return double.tryParse(value) ?? 0.0;
+    return Money.parse(value);
   }
 
   static int? _parseInt(String? value) {
     if (value == null || value.isEmpty) return 0;
-    return int.tryParse(value) ?? 0;
+    return int.tryParse(value.trim()) ?? Money.parse(value).round();
   }
 
   static String _getCellString(Object? value) {
     if (value == null) return '';
-    if (value is String) return value;
-    return value.toString();
+    if (value is String) return value.trim();
+    return value.toString().trim();
   }
+
+  /// Maps a sheet's header row to column indexes.
+  ///
+  /// Reading columns by position meant a file whose columns had been reordered
+  /// imported prices into the description field, and a file missing a single
+  /// column imported nothing at all.
+  static Map<String, int> _headerIndex(Sheet sheet) {
+    final index = <String, int>{};
+    if (sheet.rows.isEmpty) return index;
+    final header = sheet.rows.first;
+    for (var i = 0; i < header.length; i++) {
+      final name = _getCellString(header[i]?.value).toLowerCase();
+      if (name.isNotEmpty) index[name] = i;
+    }
+    return index;
+  }
+
+  static Object? _cell(List<Data?> row, Map<String, int> header, String name) {
+    final i = header[name.toLowerCase()];
+    if (i == null || i >= row.length) return null;
+    return row[i]?.value;
+  }
+
+  static bool _hasColumns(Map<String, int> header, List<String> required) =>
+      required.every((c) => header.containsKey(c.toLowerCase()));
 }

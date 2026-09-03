@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
+import 'package:pos/core/helpers/money.dart';
 import 'package:pos/http_client/local_storage/local_storage_helpers.dart';
 
 class HomeSceenController extends GetxController {
@@ -45,21 +46,23 @@ class HomeSceenController extends GetxController {
   }
 
   void saveProducts() {
-    LocalStorageHelpers.storeJsonList('itemsBox', 'products', allProducts.map((p) => p.toJson()).toList());
+    LocalStorageHelpers.storeJsonList(
+        'itemsBox', 'products', allProducts.map((p) => p.toJson()).toList());
   }
 
   void saveCategories() {
-    LocalStorageHelpers.storeJsonList('itemsBox', 'categories', categories.map((c) => {'name': c}).toList());
+    LocalStorageHelpers.storeJsonList(
+        'itemsBox', 'categories', categories.map((c) => {'name': c}).toList());
   }
 
   void addToCart(AddEditItemModel product) {
-    final existingIndex =
-        cart.indexWhere((item) => item.description == product.description);
+    final key = product.identityKey;
+    final existingIndex = cart.indexWhere((item) => item.identityKey == key);
     if (existingIndex >= 0) {
       cart[existingIndex].quantity = (cart[existingIndex].quantity ?? 0) + 1;
       cart.refresh();
     } else {
-      final cartItem = AddEditItemModel.fromJson(product.toJson());
+      final cartItem = product.copy();
       cartItem.quantity = 1;
       cart.add(cartItem);
     }
@@ -106,12 +109,16 @@ class HomeSceenController extends GetxController {
 
   void removeItem(int index) => cart.removeAt(index);
 
-  double get total =>
-      cart.fold(0, (sum, item) => sum + (item.quantity ?? 0) * (item.sellingPrice ?? 0));
+  double get total => Money.round(cart.fold<double>(0.0,
+      (sum, item) => sum + (item.quantity ?? 0) * (item.sellingPrice ?? 0)));
 
-  List<AddEditItemModel> get filteredProducts => allProducts
-      .where((p) => p.category == selectedCategory.value)
-      .toList();
+  /// With no category chosen the till shows the whole catalog. Filtering on an
+  /// empty category matched nothing, so the grid opened blank.
+  List<AddEditItemModel> get filteredProducts {
+    final category = selectedCategory.value;
+    if (category.isEmpty) return allProducts.toList();
+    return allProducts.where((p) => p.category == category).toList();
+  }
 
   void clearCart() => cart.clear();
 
@@ -124,17 +131,24 @@ class HomeSceenController extends GetxController {
   }
 
   void deleteProduct(AddEditItemModel product) {
-    allProducts.remove(product);
-    saveProducts();
-  }
-
-  void updateProduct(AddEditItemModel product) {
-    final index = allProducts.indexWhere((p) => p.description == product.description);
+    final key = product.identityKey;
+    final index = allProducts.indexWhere((p) => p.identityKey == key);
     if (index >= 0) {
-      allProducts[index] = product;
-      allProducts.refresh();
+      allProducts.removeAt(index);
       saveProducts();
     }
+  }
+
+  /// [original] is the row as it was before editing: the edit may itself have
+  /// changed the barcode or the description that identifies it.
+  bool updateProduct(AddEditItemModel original, AddEditItemModel updated) {
+    final key = original.identityKey;
+    final index = allProducts.indexWhere((p) => p.identityKey == key);
+    if (index < 0) return false;
+    allProducts[index] = updated;
+    allProducts.refresh();
+    saveProducts();
+    return true;
   }
 
   void deleteCategory(String category) {
@@ -143,6 +157,11 @@ class HomeSceenController extends GetxController {
     saveCategories();
     allProducts.removeWhere((p) => p.category == category);
     saveProducts();
+    // Leaving a deleted category selected left the till filtering on
+    // something that no longer exists, showing an empty grid with no way back.
+    if (selectedCategory.value == category) {
+      selectedCategory.value = '';
+    }
   }
 
   void toggleCategoryExpanded(String category) {
@@ -158,16 +177,9 @@ class HomeSceenController extends GetxController {
     final query = code.trim();
     if (query.isEmpty) return false;
     for (final p in allProducts) {
-      try {
-        final map = p.toJson();
-        final keys = ['barcode', 'barCode', 'code', 'sku', 'serial'];
-        for (final k in keys) {
-          if (map.containsKey(k) && map[k]?.toString() == query) {
-            addToCart(p);
-            return true;
-          }
-        }
-      } catch (_) {
+      if ((p.barcode?.trim() ?? '') == query) {
+        addToCart(p);
+        return true;
       }
     }
     return false;

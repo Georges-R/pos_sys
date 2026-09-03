@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 class ProductCard extends StatelessWidget {
   const ProductCard({
     super.key,
@@ -30,21 +31,33 @@ class ProductCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8.0),
         child: Padding(
           padding: const EdgeInsets.all(8.0),
+          // A tile only ever gets as much room as the grid gives it. Taking
+          // the children's natural height overflowed as soon as the window
+          // was narrow enough to squeeze the cells.
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 8.0),
-              Text(
-                productName,
-                style: theme.textTheme.titleMedium?.copyWith(color: textColor),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Flexible(
+                child: Text(
+                  productName,
+                  textAlign: TextAlign.center,
+                  style:
+                      theme.textTheme.titleMedium?.copyWith(color: textColor),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(height: 4.0),
-              Text('\$${price.toStringAsFixed(2)}',
-                  style:
-                      theme.textTheme.titleSmall?.copyWith(color: textColor)),
+              Flexible(
+                child: Text(
+                  '\$${price.toStringAsFixed(2)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(color: textColor),
+                ),
+              ),
             ],
           ),
         ),

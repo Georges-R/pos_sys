@@ -59,6 +59,10 @@ class ListingItemsView extends GetView<HomeSceenController> {
           Expanded(
             child: Obx(() {
               final q = searchQuery.value.trim().toLowerCase();
+              // ListView.builder runs its item builder outside this closure,
+              // so reads in there are not tracked. Touching the product list
+              // here is what makes the screen rebuild after an add or delete.
+              final products = controller.allProducts.toList();
 
               if (controller.categories.isEmpty) {
                 return const Center(child: Text('No categories available'));
@@ -72,7 +76,7 @@ class ListingItemsView extends GetView<HomeSceenController> {
                 itemBuilder: (context, index) {
                   final category = controller.categories[index];
                   final rawProducts =
-                      controller.getProductsByCategory(category);
+                      products.where((p) => p.category == category).toList();
 
                   final filteredProducts = rawProducts.where((p) {
                     if (q.isEmpty) return true;
@@ -159,7 +163,6 @@ class ListingItemsView extends GetView<HomeSceenController> {
                               ),
                             ),
                           ),
-
                           AnimatedSize(
                             duration: const Duration(milliseconds: 250),
                             curve: Curves.easeInOut,

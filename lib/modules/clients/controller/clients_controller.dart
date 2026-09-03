@@ -1,13 +1,36 @@
 import 'package:get/get.dart';
+import 'package:pos/core/helpers/notify.dart';
 import 'package:pos/http_client/services/clients_service.dart';
 import 'package:pos/http_client/services/sales_service.dart';
 
 class ClientsController extends GetxController {
   RxList<Map<String, dynamic>> clients = <Map<String, dynamic>>[].obs;
-  RxMap<String, dynamic> clientTabs = <String, dynamic>{}.obs;
   RxString selectedClientId = ''.obs;
   RxString selectedClientName = ''.obs;
-  RxMap<String, dynamic> clientStats = <String, dynamic>{}.obs;
+
+  /// Tabs and stats are kept per customer. A single shared map meant that
+  /// expanding a second customer replaced what the first customer's panel was
+  /// showing, so two open panels displayed the same person's debt.
+  final RxMap<String, Map<String, dynamic>> tabsByClient =
+      <String, Map<String, dynamic>>{}.obs;
+  final RxMap<String, Map<String, dynamic>> statsByClient =
+      <String, Map<String, dynamic>>{}.obs;
+
+  /// Bumped whenever the tab ledger changes, so balances shown outside a
+  /// panel recompute instead of sitting stale until the screen is reopened.
+  final RxInt ledgerRevision = 0.obs;
+
+  Map<String, dynamic> tabsOf(String clientId) =>
+      tabsByClient[clientId] ?? const <String, dynamic>{};
+
+  Map<String, dynamic> statsOf(String clientId) =>
+      statsByClient[clientId] ??
+      const <String, dynamic>{
+        'totalTabs': 0,
+        'openTabs': 0,
+        'totalOwed': 0.0,
+        'closedTabs': 0,
+      };
 
   @override
   void onInit() {
@@ -20,10 +43,9 @@ class ClientsController extends GetxController {
       final loadedClients = ClientsService.getAllClients();
       clients.assignAll(loadedClients);
     } catch (e) {
-      Get.snackbar('Error', 'Failed to load clients: $e');
+      Notify.error('Error', 'Failed to load clients: $e');
     }
   }
-
 
   void loadClientTabs(String clientId) {
     try {
@@ -34,17 +56,14 @@ class ClientsController extends GetxController {
         selectedClientName.value = client['name'] ?? 'Unknown';
       } else {
         selectedClientName.value = 'Unknown Client';
-        Get.snackbar('Warning', 'Client not found');
+        Notify.error('Warning', 'Client not found');
         return;
       }
 
-      final tabs = SalesService.getClientTabs(clientId);
-      clientTabs.assignAll(tabs);
-
-      final stats = ClientsService.getClientStats(clientId);
-      clientStats.assignAll(stats);
+      tabsByClient[clientId] = SalesService.getClientTabs(clientId);
+      statsByClient[clientId] = ClientsService.getClientStats(clientId);
     } catch (e) {
-      Get.snackbar('Error', 'Failed to load client tabs: $e');
+      Notify.error('Error', 'Failed to load client tabs: $e');
     }
   }
 
@@ -52,9 +71,10 @@ class ClientsController extends GetxController {
     try {
       await SalesService.deleteTab(tabId);
       loadClientTabs(selectedClientId.value);
-      Get.snackbar('Success', 'Tab deleted successfully');
+      ledgerRevision.value++;
+      Notify.success('Success', 'Tab deleted successfully');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to delete tab: $e');
+      Notify.error('Error', 'Failed to delete tab: $e');
     }
   }
 
@@ -62,19 +82,24 @@ class ClientsController extends GetxController {
     try {
       await SalesService.markTabAsPaid(tabId);
       loadClientTabs(selectedClientId.value);
-      Get.snackbar('Success', 'Tab converted to sale');
+      ledgerRevision.value++;
+      Notify.success('Success', 'Tab converted to sale');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to convert tab: $e');
+      Notify.error('Error', 'Failed to convert tab: $e');
     }
   }
 
   Future<void> addNewClient(String name, String phone) async {
     try {
-      await ClientsService.addClient(name, phone);
+      final id = await ClientsService.addClient(name, phone);
+      if (id == null) {
+        Notify.error('Error', 'A customer needs a name');
+        return;
+      }
       loadClients();
-      Get.snackbar('Success', 'Client added successfully');
+      Notify.success('Success', 'Client added successfully');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to add client: $e');
+      Notify.error('Error', 'Failed to add client: $e');
     }
   }
 
@@ -82,23 +107,36 @@ class ClientsController extends GetxController {
     try {
       await ClientsService.updateClient(clientId, name, phone);
       loadClients();
-      Get.snackbar('Success', 'Client updated successfully');
+      Notify.success('Success', 'Client updated successfully');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to update client: $e');
+      Notify.error('Error', 'Failed to update client: $e');
     }
   }
 
   Future<void> deleteClient(String clientId) async {
     try {
+      // Deleting the customer leaves their open tabs in the ledger with no
+      // one attached to them; the money owed would simply disappear.
+      final owed = ClientsService.getClientBalance(clientId);
+      if (owed > 0) {
+        Notify.error('Cannot delete',
+            'This customer still owes \$${owed.toStringAsFixed(2)}. Settle their tabs first.');
+        return;
+      }
       await ClientsService.deleteClient(clientId);
+      tabsByClient.remove(clientId);
+      statsByClient.remove(clientId);
       loadClients();
-      Get.snackbar('Success', 'Client deleted successfully');
+      Notify.success('Success', 'Client deleted successfully');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to delete client: $e');
+      Notify.error('Error', 'Failed to delete client: $e');
     }
   }
 
   double getClientBalance(String clientId) {
+    // Touch the revision so any Obx reading a balance re-runs when a tab is
+    // settled or deleted.
+    ledgerRevision.value;
     return ClientsService.getClientBalance(clientId);
   }
 

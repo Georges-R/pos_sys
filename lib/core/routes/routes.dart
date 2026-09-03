@@ -5,7 +5,9 @@ import 'package:pos/modules/home_screen/controller/home_sceen_controller.dart';
 import 'package:pos/modules/home_screen/view/home_sceen_view.dart';
 import 'package:pos/modules/items/add_edit_item/binding/add_edit_item_binding.dart';
 import 'package:pos/modules/items/add_edit_item/view/add_edit_item_view.dart';
+import 'package:pos/modules/items/listing_items/controller/listing_items_controller.dart';
 import 'package:pos/modules/items/listing_items/view/listing_items_view.dart';
+import 'package:pos/modules/settings/controller/settings_controller.dart';
 import 'package:pos/modules/sales/binding/sales_binding.dart';
 import 'package:pos/modules/sales/view/sales_view.dart';
 import 'package:pos/modules/settings/binding/settings_binding.dart';
@@ -39,6 +41,8 @@ class Routes {
       page: () => ListingItemsView(),
       binding: BindingsBuilder(() {
         Get.lazyPut(() => HomeSceenController(), fenix: true);
+        Get.lazyPut(() => SettingsController(), fenix: true);
+        Get.lazyPut(() => ListingItemsController(), fenix: true);
       }),
     ),
     GetPage(

@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'hive_service.dart';
 
 class LocalStorageHelpers {
-  static Future<void> storeJson(String boxName, String key, Map<String, dynamic> json) async {
+  static Future<void> storeJson(
+      String boxName, String key, Map<String, dynamic> json) async {
     final jsonString = jsonEncode(json);
     await HiveService.storeData(boxName, key, jsonString);
   }
@@ -19,7 +20,8 @@ class LocalStorageHelpers {
     return null;
   }
 
-  static Future<void> storeJsonList(String boxName, String key, List<Map<String, dynamic>> jsonList) async {
+  static Future<void> storeJsonList(
+      String boxName, String key, List<Map<String, dynamic>> jsonList) async {
     final jsonString = jsonEncode(jsonList);
     await HiveService.storeData(boxName, key, jsonString);
   }

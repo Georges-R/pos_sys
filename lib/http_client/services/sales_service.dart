@@ -34,7 +34,6 @@ class SalesService {
     double exchangeRate,
     double tva,
   ) async {
-    final uuid = Uuid();
     final tabId = uuid.v4();
     final tab = {
       'id': tabId,
@@ -51,16 +50,23 @@ class SalesService {
     await HiveService.storeSale(tabId, tab);
   }
 
+  /// Only real sale records. The box has held stray non-sale entries in the
+  /// past, and a report that casts every value to a sale crashes on them.
   static Map<String, dynamic> getAllSales() {
-    return HiveService.getBox(_salesBox);
+    final entries = HiveService.getBox(_salesBox);
+    entries.removeWhere((key, dynamic value) => !_isSale(value));
+    return entries;
   }
+
+  static bool _isSale(dynamic value) =>
+      value is Map && value['id'] != null && value['date'] != null;
 
   static List<Map<String, dynamic>> getSalesByDateRange(
       DateTime startDate, DateTime endDate) {
-    final allSales = getAllSales().values.toList();
-    return allSales.cast<Map<String, dynamic>>().where((sale) {
-      final saleDate = DateTime.parse(sale['date']);
-      return saleDate.isAfter(startDate) && saleDate.isBefore(endDate);
+    return getAllSales().values.whereType<Map<String, dynamic>>().where((sale) {
+      final saleDate = DateTime.tryParse('${sale['date']}');
+      if (saleDate == null) return false;
+      return !saleDate.isBefore(startDate) && !saleDate.isAfter(endDate);
     }).toList();
   }
 
@@ -90,5 +96,12 @@ class SalesService {
 
   static Future<void> deleteTab(String tabId) async {
     await HiveService.deleteData(_salesBox, tabId);
+  }
+
+  static double totalRevenue() {
+    return getAllSales().values.fold<double>(0.0, (sum, dynamic sale) {
+      final value = (sale as Map)['totalUSD'];
+      return sum + (value is num ? value.toDouble() : 0.0);
+    });
   }
 }

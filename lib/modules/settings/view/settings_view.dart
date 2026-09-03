@@ -10,14 +10,8 @@ class SettingsView extends GetView<SettingsController> {
 
   @override
   Widget build(BuildContext context) {
-    final storeNameController = TextEditingController();
-    final exchangeRateController = TextEditingController();
-    final tvaController = TextEditingController();
-
-    storeNameController.text = controller.storeName.value;
-    exchangeRateController.text = controller.exchangeRate.value.toString();
-    tvaController.text = controller.tva.value.toString();
-
+    // The fields live on the controller so they survive a rebuild and get
+    // disposed with it; creating them here leaked one set per build.
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -33,38 +27,30 @@ class SettingsView extends GetView<SettingsController> {
             child: Column(
               children: [
                 FormInputField(
-                  controller: storeNameController,
+                  controller: controller.storeNameField,
                   label: 'Store Name',
                   hint: 'Enter store name',
                   isRequired: true,
-                  onChange: () =>
-                      controller.storeName.value = storeNameController.text,
                 ),
                 const SizedBox(height: 16),
                 FormInputField(
-                  controller: exchangeRateController,
+                  controller: controller.exchangeRateField,
                   label: 'Exchange Rate to LBP',
                   hint: 'Enter exchange rate',
                   keyboardType: TextInputType.number,
                   allowDecimal: true,
                   isRequired: true,
-                  onChange: () => controller.exchangeRate.value =
-                      double.tryParse(exchangeRateController.text) ?? 0.0,
                 ),
                 const SizedBox(height: 16),
                 FormInputField(
-                  controller: tvaController,
+                  controller: controller.tvaField,
                   label: 'TVA %',
                   hint: 'Enter TVA percentage',
                   keyboardType: TextInputType.number,
                   allowDecimal: true,
                   isRequired: true,
-                  onChange: () => controller.tva.value =
-                      double.tryParse(tvaController.text) ?? 0.0,
                 ),
-
                 const SizedBox(height: 24),
-                
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -114,7 +100,6 @@ class SettingsView extends GetView<SettingsController> {
                     ],
                   ),
                 ),
-                
                 const SizedBox(height: 32),
                 Align(
                   alignment: Alignment.centerRight,

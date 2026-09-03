@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:pos/themes/styles/styles.dart';
 
@@ -59,4 +58,3 @@ class CustomLeftDrawer extends StatelessWidget {
     );
   }
 }
-

@@ -3,12 +3,17 @@ import 'package:get/get.dart';
 import 'package:pos/core/base_classes/base_form_getx_controller/base_form_getx_controller.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
 import 'package:pos/modules/home_screen/controller/home_sceen_controller.dart';
+import 'package:pos/core/helpers/notify.dart';
 import 'package:pos/modules/settings/controller/settings_controller.dart';
 
 class AddEditItemController extends BaseFormGetxController {
   final Rx<String?> selectedCategory = Rx<String?>(null);
 
   final formKey = GlobalKey<FormState>();
+
+  /// The catalog row being edited, as it was when the screen opened. Null on
+  /// the add path.
+  AddEditItemModel? itemToEdit;
 
   late TextEditingController descriptionController,
       barcodeController,
@@ -21,9 +26,14 @@ class AddEditItemController extends BaseFormGetxController {
 
   @override
   void onInit() {
-    final category = Get.arguments;
-    if (category is String && category.isNotEmpty) {
-      selectedCategory.value = category; 
+    // The catalog screen opens this route with the product to edit; the till
+    // opens it with the category to pre-select. Both arrive as Get.arguments.
+    final args = Get.arguments;
+    if (args is AddEditItemModel) {
+      itemToEdit = args;
+      selectedCategory.value = args.category;
+    } else if (args is String && args.isNotEmpty) {
+      selectedCategory.value = args;
     }
     super.onInit();
   }
@@ -32,7 +42,8 @@ class AddEditItemController extends BaseFormGetxController {
   Future<void> initializeForm() async {
     await fillFormData();
     await setFormInitialValue();
-    isEditing = false;
+    isEditing = itemToEdit != null;
+    if (isEditing) await setFormValuesFromItemToEdit();
     update();
   }
 
@@ -83,9 +94,7 @@ class AddEditItemController extends BaseFormGetxController {
   }
 
   @override
-  editedItemDataBind() {
-    throw UnimplementedError();
-  }
+  AddEditItemModel editedItemDataBind() => newItemDataBind();
 
   @override
   Future<void> fillFormData() async {
@@ -115,29 +124,54 @@ class AddEditItemController extends BaseFormGetxController {
   }
 
   @override
-  Future<void> saveEditedItem({required editedItem}) {
-    throw UnimplementedError();
+  Future<void> saveEditedItem({required dynamic editedItem}) async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    final original = itemToEdit;
+    if (original == null) return;
+
+    final homeController = Get.find<HomeSceenController>();
+    final replaced =
+        homeController.updateProduct(original, editedItem as AddEditItemModel);
+    if (!replaced) {
+      Notify.error('Not saved', 'That item is no longer in the catalog');
+      return;
+    }
+    Get.back();
   }
 
   @override
-  Future<void> saveNewItem({required newItem}) async {
-    if (!formKey.currentState!.validate()) {
+  Future<void> saveNewItem({required dynamic newItem}) async {
+    if (!(formKey.currentState?.validate() ?? false)) {
       return;
     }
 
     final homeController = Get.find<HomeSceenController>();
-    homeController.addProduct(newItem);
+    homeController.addProduct(newItem as AddEditItemModel);
     Get.back();
   }
 
   @override
   Future<void> setFormInitialValue() async {
-    final settingsController = Get.find<SettingsController>();
+    // This screen is reachable from routes whose binding does not register
+    // settings; falling back keeps a Get.find from throwing mid-build.
+    final settingsController = Get.isRegistered<SettingsController>()
+        ? Get.find<SettingsController>()
+        : Get.put(SettingsController());
     tvaPercentController.text = settingsController.tva.value.toString();
   }
 
   @override
-  Future<void> setFormValuesFromItemToEdit() {
-    throw UnimplementedError();
+  Future<void> setFormValuesFromItemToEdit() async {
+    final item = itemToEdit;
+    if (item == null) return;
+    descriptionController.text = item.description ?? '';
+    barcodeController.text = item.barcode ?? '';
+    quantityController.text = item.quantity?.toString() ?? '';
+    costPriceController.text = item.costPrice?.toString() ?? '';
+    tvaPercentController.text = item.tvaPercent?.toString() ?? '';
+    priceAfterTvaController.text = item.priceAfterTva?.toString() ?? '';
+    profitPercentController.text = item.profitPercent?.toString() ?? '';
+    sellingPriceController.text = item.sellingPrice?.toString() ?? '';
+    selectedCategory.value = item.category;
   }
 }

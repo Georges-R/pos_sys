@@ -54,4 +54,18 @@ class AddEditItemModel {
       'selling_price': sellingPrice,
     };
   }
+
+  /// What makes this row a distinct product on the shelf.
+  ///
+  /// The barcode is the real identifier when the shop uses one. Falling back
+  /// to the description alone would merge two genuinely different products
+  /// that happen to share a name — a common case when the same article comes
+  /// from two suppliers at two prices.
+  String get identityKey {
+    final code = barcode?.trim() ?? '';
+    if (code.isNotEmpty) return 'barcode:$code';
+    return 'item:${description?.trim()}|${category?.trim()}|$sellingPrice';
+  }
+
+  AddEditItemModel copy() => AddEditItemModel.fromJson(toJson());
 }
