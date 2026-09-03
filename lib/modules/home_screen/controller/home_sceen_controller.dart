@@ -173,15 +173,52 @@ class HomeSceenController extends GetxController {
     return allProducts.where((p) => p.category == category).toList();
   }
 
-  bool findAndAddByBarcode(String code) {
+  AddEditItemModel? findByBarcode(String code) {
     final query = code.trim();
-    if (query.isEmpty) return false;
+    if (query.isEmpty) return null;
     for (final p in allProducts) {
-      if ((p.barcode?.trim() ?? '') == query) {
-        addToCart(p);
-        return true;
-      }
+      if ((p.barcode?.trim() ?? '') == query) return p;
     }
-    return false;
+    return null;
+  }
+
+  bool findAndAddByBarcode(String code) {
+    final match = findByBarcode(code);
+    if (match == null) return false;
+    addToCart(match);
+    return true;
+  }
+
+  /// Creates a catalog row from the till with only what it takes to ring the
+  /// item up now: a name, a category and a price. Cost, TVA, profit and stock
+  /// stay unset for the item screen to fill in later — a cashier with a
+  /// customer waiting cannot stop to work out margins.
+  ///
+  /// Returns null when [barcode] already belongs to another product: two rows
+  /// sharing a barcode share an [AddEditItemModel.identityKey], and every
+  /// later edit or delete would then land on whichever one was found first.
+  AddEditItemModel? quickCreateProduct({
+    required String description,
+    required String barcode,
+    required double sellingPrice,
+    String? category,
+  }) {
+    final code = barcode.trim();
+    if (code.isNotEmpty && findByBarcode(code) != null) return null;
+
+    final trimmedCategory = category?.trim();
+    if (trimmedCategory != null && trimmedCategory.isNotEmpty) {
+      addCategory(trimmedCategory);
+    }
+
+    final product = AddEditItemModel(
+      description: description.trim(),
+      category: trimmedCategory,
+      barcode: code,
+      quantity: 0,
+      sellingPrice: Money.round(sellingPrice),
+    );
+    addProduct(product);
+    return product;
   }
 }

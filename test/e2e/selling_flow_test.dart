@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:pos/core/routes/paths.dart';
@@ -142,6 +143,122 @@ void main() {
       final home = await openTill(tester);
       expect(home.findAndAddByBarcode('9999'), isFalse);
       expect(home.cart, isEmpty);
+    });
+  });
+
+  group('scanning an item the catalog does not have', () {
+    Future<HomeSceenController> scanUnknown(WidgetTester tester,
+        {String code = '5005'}) async {
+      final home = await openTill(tester);
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Scan barcode here'), code);
+      await settle(tester);
+      return home;
+    }
+
+    testWidgets('warns instead of failing silently', (tester) async {
+      await scanUnknown(tester);
+      expect(find.text('Item not found'), findsOneWidget);
+      expect(find.textContaining('5005'), findsWidgets,
+          reason: 'the cashier has to see which code came up empty');
+    });
+
+    testWidgets('backing out leaves the catalog and the sale alone',
+        (tester) async {
+      final home = await scanUnknown(tester);
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+
+      expect(find.text('Item not found'), findsNothing);
+      expect(home.allProducts, hasLength(3));
+      expect(home.cart, isEmpty);
+    });
+
+    testWidgets('creating the item rings it up without leaving the till',
+        (tester) async {
+      final home = await scanUnknown(tester);
+      await tester.tap(find.text('Create item'));
+      await settle(tester);
+
+      expect(find.text('New Item'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '5005'), findsOneWidget,
+          reason: 'the scanned code is pre-filled, not retyped');
+
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Enter item name'),
+          'Energy Drink');
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await settle(tester);
+      await tester.tap(find.text('Drinks').last);
+      await settle(tester);
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Enter selling price'), '3.5');
+      await settle(tester);
+
+      // The save writes to Hive. A write started inside the fake-async zone
+      // never completes, and teardown then blocks on it forever.
+      await act(tester, () => tester.tap(find.text('Save & Add to Sale')));
+      await settle(tester);
+
+      expect(find.text('New Item'), findsNothing);
+      expect(home.allProducts, hasLength(4));
+      final created = home.findByBarcode('5005');
+      expect(created, isNotNull);
+      expect(created!.description, 'Energy Drink');
+      expect(created.category, 'Drinks');
+      expect(created.sellingPrice, 3.50);
+      expect(home.cart.single.description, 'Energy Drink',
+          reason: 'the scan that opened the dialog was a sale in progress');
+      expect(home.total, 3.50);
+    });
+
+    testWidgets('the quick-created item survives a restart', (tester) async {
+      final home = await openTill(tester);
+      await withStorage(tester, () async {
+        home.quickCreateProduct(
+          description: 'Energy Drink',
+          barcode: '5005',
+          sellingPrice: 3.5,
+          category: 'Drinks',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      await withStorage(tester, restartApp);
+
+      final reopened = register(HomeSceenController());
+      reopened.onInit();
+      expect(reopened.findByBarcode('5005')?.description, 'Energy Drink');
+    });
+
+    testWidgets('a category typed in the dialog joins the catalog',
+        (tester) async {
+      final home = await openTill(tester);
+      await withStorage(tester, () async {
+        home.quickCreateProduct(
+          description: 'Batteries',
+          barcode: '7007',
+          sellingPrice: 5,
+          category: 'Hardware',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      expect(home.categories, contains('Hardware'),
+          reason: 'an item filed under a category the till cannot show is lost');
+    });
+
+    testWidgets('a barcode already in use is refused', (tester) async {
+      final home = await openTill(tester);
+      final created = home.quickCreateProduct(
+        description: 'Not Espresso',
+        barcode: '1001',
+        sellingPrice: 9.99,
+      );
+
+      expect(created, isNull,
+          reason: 'two rows on one barcode make edits and deletes ambiguous');
+      expect(home.allProducts, hasLength(3));
+      expect(home.findByBarcode('1001')?.description, 'Espresso');
     });
   });
 

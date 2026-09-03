@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:pos/custom_widgets/totals_tiles/totals_tiles.dart';
 import '../controller/checkout_controller.dart';
 
 class CheckoutView extends GetView<CheckoutController> {
@@ -46,166 +47,122 @@ class CheckoutView extends GetView<CheckoutController> {
                     ),
             ),
           ),
-          const Divider(),
-          // Totals Section
+          // Totals + Actions Panel
+          //
+          // Two equal-width total tiles (USD | LBP) sit exactly above the two
+          // equal-width buttons: both rows share the same [Expanded, 16,
+          // Expanded] skeleton, so the outer edges and the centre gutter
+          // coincide at every width.
           Obx(
-            () => Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Subtotal:', style: TextStyle(fontSize: 18)),
-                      Text(
-                        '${NumberFormat('#,##0.00').format(controller.subtotalUSD.value)} \$',
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                    ],
+            () {
+              final theme = Theme.of(context);
+              final tva = controller.tva.value;
+              final rate = controller.exchangeRate.value;
+              final lbp = NumberFormat('#,###');
+
+              return Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  border: Border(
+                    top: BorderSide(color: theme.dividerColor, width: 1),
                   ),
-                  if (controller.tva.value > 0)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'VAT (${NumberFormat('#,##0.##').format(controller.tva.value)}%):',
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                        Text(
-                          '${NumberFormat('#,##0.00').format(controller.tvaAmountUSD.value)} \$',
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                      ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 18,
+                      offset: const Offset(0, -6),
                     ),
-                  const Divider(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  ],
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.only(bottom: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'Total (USD):',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      TotalsTiles(
+                        totalUSD: controller.totalUSD.value,
+                        totalLBP: controller.totalLBP.value,
+                        usdFootnote: tva > 0
+                            ? 'Includes ${NumberFormat('#,##0.##').format(tva)}% VAT'
+                                '  ·  \$${NumberFormat('#,##0.00').format(controller.tvaAmountUSD.value)}'
+                            : null,
+                        lbpFootnote: rate > 0
+                            ? '1 USD  =  ${lbp.format(rate)} LBP'
+                            : 'Exchange rate not set',
                       ),
-                      Text(
-                        '${NumberFormat('#,##0.00').format(controller.totalUSD.value)} \$',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      const SizedBox(height: 16),
+                      // Action Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ActionButton(
+                              label: 'Pay Now',
+                              icon: Icons.check_circle_outline,
+                              color: const Color(0xFF2E9E52),
+                              onPressed: controller.payNow,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _ActionButton(
+                              label: 'Pay Later',
+                              icon: Icons.person_outline,
+                              color: const Color(0xFF2F7BE8),
+                              onPressed: controller.showCustomerSelector,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total (LBP):',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        '${NumberFormat('#,###').format(controller.totalLBP.value)} LBP',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Row(
-                  //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //   children: [
-                  //     const Text('Remaining:'),
-                  //     Text(
-                  //       '\$${controller.remainingAmount.value.toStringAsFixed(2)}',
-                  //       style: const TextStyle(
-                  //         fontWeight: FontWeight.bold,
-                  //         color: Colors.green,
-                  //       ),
-                  //     ),
-                  //   ],
-                  // ),
-                ],
-              ),
-            ),
-          ),
-          const Divider(),
-          // Predefined Bills Section
-          // Expanded(
-          //   flex: 1,
-          //   child: Padding(
-          //     padding: const EdgeInsets.all(8.0),
-          //     child: GridView.count(
-          //       crossAxisCount: 3,
-          //       childAspectRatio: 2,
-          //       children: controller.predefinedBills
-          //           .map(
-          //             (bill) => Card(
-          //               child: InkWell(
-          //                 onTap: () => controller.applyPredefinedBill(bill),
-          //                 child: Center(
-          //                   child: Text(
-          //                     '\$$bill',
-          //                     style: const TextStyle(
-          //                       fontWeight: FontWeight.bold,
-          //                       fontSize: 16,
-          //                     ),
-          //                   ),
-          //                 ),
-          //               ),
-          //             ),
-          //           )
-          //           .toList(),
-          //     ),
-          //   ),
-          // ),
-          // Action Buttons
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => controller.payNow(),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Pay Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      textStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => controller.showCustomerSelector(),
-                    icon: const Icon(Icons.person),
-                    label: const Text('Pay Later'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      textStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 60,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 24),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
       ),
     );
   }

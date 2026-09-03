@@ -8,8 +8,10 @@ import 'package:pos/custom_widgets/custom_left_drawer/custom_left_drawer.dart';
 import 'package:pos/custom_widgets/order_item_card/order_item_card.dart';
 import 'package:pos/custom_widgets/pos_button/pos_button.dart';
 import 'package:pos/custom_widgets/product_card/product_card.dart';
+import 'package:pos/custom_widgets/totals_tiles/totals_tiles.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
 import 'package:pos/modules/home_screen/controller/home_sceen_controller.dart';
+import 'package:pos/modules/home_screen/view/quick_add_item_dialog.dart';
 import 'package:pos/modules/settings/controller/settings_controller.dart';
 import 'package:pos/themes/styles/styles.dart';
 
@@ -78,11 +80,57 @@ class _HomeScreenViewState extends State<HomeScreenView> {
     final found = controller.findAndAddByBarcode(code);
     _barcodeController.clear();
     _firstKeystrokeAt = null;
-    _barcodeFocus.requestFocus();
 
-    if (!found) {
-      Notify.error('Not found', 'No product matches the scanned code');
+    if (found) {
+      _barcodeFocus.requestFocus();
+      return;
     }
+    await _offerToCreateProduct(code);
+  }
+
+  /// A code that matches nothing is usually a product the shop has started
+  /// selling but never entered. Telling the cashier "not found" left them to
+  /// abandon the sale or leave the till for the item screen, so offer to
+  /// create it here and ring it up straight away.
+  Future<void> _offerToCreateProduct(String code) async {
+    if (!mounted) return;
+    final wantsToCreate = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Item not found'),
+        content: Text(
+          'No product in the catalog uses barcode "$code".\n\n'
+          'Create it now so you can add it to this sale?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Create item'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (wantsToCreate != true) {
+      _barcodeFocus.requestFocus();
+      return;
+    }
+
+    final product = await QuickAddItemDialog.show(context, barcode: code);
+    if (!mounted) return;
+    if (product != null) {
+      controller.addToCart(product);
+      Notify.success(
+        'Item created',
+        '${product.description} was added to the catalog and this sale',
+      );
+    }
+    _barcodeFocus.requestFocus();
   }
 
   @override
@@ -156,7 +204,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                                     margin: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 16),
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 8),
+                                        horizontal: 18, vertical: 10),
                                     decoration: BoxDecoration(
                                       color: isSelected
                                           ? Colors.blue
@@ -173,7 +221,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                                           fontWeight: isSelected
                                               ? FontWeight.bold
                                               : FontWeight.normal,
-                                          fontSize: 16,
+                                          fontSize: 19,
                                         ),
                                       ),
                                     ),
@@ -201,16 +249,19 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                       // any window narrower than a full-size tablet.
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 180,
+                        maxCrossAxisExtent: 200,
                         mainAxisSpacing: 8,
                         crossAxisSpacing: 8,
-                        childAspectRatio: 1.25,
+                        // Each tile carries a name plus both currencies, so
+                        // it needs to be a touch taller than it is wide.
+                        childAspectRatio: 1.15,
                       ),
                       itemBuilder: (context, index) {
                         final p = controller.filteredProducts[index];
                         return ProductCard(
                           productName: p.description ?? '',
                           price: p.sellingPrice ?? 0,
+                          exchangeRate: settingsController.exchangeRate.value,
                           onAddToCart: () => controller.addToCart(p),
                           onLongPress: () =>
                               _showDeleteProductDialog(context, p),
@@ -271,43 +322,47 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                     ),
                   ),
                 ),
-                const Divider(),
+                const Divider(height: 1),
+                // Same total tiles as the checkout screen; the 400px sidebar
+                // is below the widget's breakpoint, so they stack vertically.
                 Obx(
-                  () => Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Total: \$${controller.total.toStringAsFixed(2)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'Total LBP: ${NumberFormat('#,###').format(controller.total * settingsController.exchangeRate.value)} LBP',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green),
-                        ),
-                      ],
+                  () {
+                    final rate = settingsController.exchangeRate.value;
+                    final count = controller.cart.fold<int>(
+                        0, (sum, item) => sum + (item.quantity ?? 0));
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                      child: TotalsTiles(
+                        totalUSD: controller.total,
+                        totalLBP: controller.total * rate,
+                        amountSize: 44,
+                        usdFootnote: count == 1 ? '1 item' : '$count items',
+                        lbpFootnote: rate > 0
+                            ? '1 USD  =  ${NumberFormat('#,###').format(rate)} LBP'
+                            : 'Exchange rate not set',
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                // Full width so the button's edges line up with the tiles.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: PosButton(
+                      text: 'Checkout',
+                      icon: Icons.shopping_cart_checkout,
+                      onPressed: () {
+                        if (controller.cart.isEmpty) {
+                          Notify.error('Empty cart', 'Add an item first');
+                          return;
+                        }
+                        Get.toNamed(Paths.checkout,
+                            arguments: controller.cart);
+                      },
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                PosButton(
-                  text: 'Checkout',
-                  icon: Icons.shopping_cart_checkout,
-                  onPressed: () {
-                    if (controller.cart.isEmpty) {
-                      Notify.error('Empty cart', 'Add an item first');
-                      return;
-                    }
-                    Get.toNamed(Paths.checkout, arguments: controller.cart);
-                  },
                 ),
                 const SizedBox(height: 8),
                 // A cashier needs to be able to abandon a basket; clearCart()
