@@ -1,0 +1,40 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package build
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath pos-windows.zip
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-windows
+          path: pos-windows.zip
+          retention-days: 30
