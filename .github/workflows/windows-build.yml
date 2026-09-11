@@ -6,6 +6,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -34,3 +37,18 @@ jobs:
           name: pos-windows
           path: build/windows/x64/runner/Release/
           retention-days: 30
+
+      - name: Zip for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath pos-windows.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" pos-windows.zip \
+            --title "POS $GITHUB_REF_NAME" \
+            --notes "Windows desktop build. Download pos-windows.zip, unzip, and run pos.exe. Keep the whole folder together."
