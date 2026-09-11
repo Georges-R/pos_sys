@@ -28,13 +28,9 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Package build
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath pos-windows.zip
-        shell: pwsh
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: pos-windows
-          path: pos-windows.zip
+          path: build/windows/x64/runner/Release/
           retention-days: 30
