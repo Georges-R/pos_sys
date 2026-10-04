@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -131,6 +133,12 @@ class _TotalTile extends StatelessWidget {
 
     // The mark is a smaller run of the same text so it shares the digits'
     // baseline, colour and scaling; identical ratio for "$" and "LBP".
+    // Caption, footnote and padding grow with a large amount so the tile
+    // keeps its proportions; at the default size they stay as they were.
+    final captionSize = math.max(13.0, amountSize * 0.2);
+    final footnoteSize = math.max(14.0, amountSize * 0.2);
+    final verticalPadding = math.max(14.0, amountSize * 0.2);
+
     final markStyle = TextStyle(
       fontSize: amountSize * 0.55,
       fontWeight: FontWeight.w800,
@@ -140,7 +148,7 @@ class _TotalTile extends StatelessWidget {
     );
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      padding: EdgeInsets.fromLTRB(20, verticalPadding, 20, verticalPadding),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
@@ -155,9 +163,9 @@ class _TotalTile extends StatelessWidget {
           Text.rich(
             TextSpan(
               style: TextStyle(
-                fontSize: 13,
+                fontSize: captionSize,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 2.2,
+                letterSpacing: captionSize * 0.17,
                 height: 1.2,
                 color: muted,
               ),
@@ -201,7 +209,7 @@ class _TotalTile extends StatelessWidget {
           if (reserveFootnote) ...[
             const SizedBox(height: 6),
             SizedBox(
-              height: 20,
+              height: math.max(20.0, footnoteSize * 1.45),
               child: note == null
                   ? null
                   : FittedBox(
@@ -211,7 +219,7 @@ class _TotalTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: footnoteSize,
                           fontWeight: FontWeight.w600,
                           height: 1.2,
                           color: muted,

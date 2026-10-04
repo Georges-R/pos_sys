@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:pos/core/routes/paths.dart';
@@ -57,6 +58,22 @@ void main() {
       final form = await openItemForm(tester, 'Drinks');
 
       expect(form.tvaPercentController.text, '11.0');
+    });
+
+    testWidgets('a form left blank still saves', (tester) async {
+      final home = await openTill(tester);
+      final form = await openItemForm(tester, null);
+
+      form.descriptionController.text = 'Gum';
+      form.tvaPercentController.clear();
+      await act(
+          tester, () => form.saveNewItem(newItem: form.newItemDataBind()));
+      await settle(tester);
+
+      expect(home.allProducts, hasLength(3),
+          reason: 'no field on the item form is mandatory');
+      expect(home.allProducts.last.description, 'Gum');
+      expect(home.allProducts.last.sellingPrice, isNull);
     });
 
     testWidgets('opening the form from the till preselects the category',
@@ -126,6 +143,48 @@ void main() {
       expect(home.allProducts, hasLength(2));
       expect(home.allProducts.map((p) => p.description),
           containsAll(['Espresso Doppio', 'Chips']));
+    });
+  });
+
+  group('the stock screen', () {
+    Future<void> openStock(WidgetTester tester) async {
+      await openTill(tester);
+      Get.toNamed(Paths.itemListingScreen);
+      await settle(tester);
+    }
+
+    Finder search() =>
+        find.widgetWithText(TextField, 'Search by name or barcode...');
+
+    testWidgets('lists every item without opening a category first',
+        (tester) async {
+      await openStock(tester);
+      expect(find.text('Espresso'), findsOneWidget);
+      expect(find.text('Chips'), findsOneWidget);
+    });
+
+    testWidgets('finds an item by its name', (tester) async {
+      await openStock(tester);
+      await tester.enterText(search(), 'chip');
+      await settle(tester);
+
+      expect(find.text('Chips'), findsOneWidget);
+      expect(find.text('Espresso'), findsNothing);
+    });
+
+    testWidgets('finds an item by its barcode', (tester) async {
+      await openStock(tester);
+      await tester.enterText(search(), '1001');
+      await settle(tester);
+
+      expect(find.text('Espresso'), findsOneWidget);
+      expect(find.text('Chips'), findsNothing);
+    });
+
+    testWidgets('every row offers edit and delete', (tester) async {
+      await openStock(tester);
+      expect(find.byTooltip('Edit'), findsNWidgets(2));
+      expect(find.byTooltip('Delete'), findsNWidgets(2));
     });
   });
 

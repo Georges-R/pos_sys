@@ -141,6 +141,10 @@ class HomeSceenController extends GetxController {
 
   /// [original] is the row as it was before editing: the edit may itself have
   /// changed the barcode or the description that identifies it.
+  ///
+  /// A line already rung up for this product takes the new name and price
+  /// but keeps the count being sold, so the total on screen stays the one the
+  /// customer will be charged.
   bool updateProduct(AddEditItemModel original, AddEditItemModel updated) {
     final key = original.identityKey;
     final index = allProducts.indexWhere((p) => p.identityKey == key);
@@ -148,7 +152,22 @@ class HomeSceenController extends GetxController {
     allProducts[index] = updated;
     allProducts.refresh();
     saveProducts();
+
+    for (var i = 0; i < cart.length; i++) {
+      if (cart[i].identityKey == key) {
+        cart[i] = updated.copy()..quantity = cart[i].quantity;
+      }
+    }
     return true;
+  }
+
+  /// The catalog row a cart line was rung up from, or null if it has since
+  /// been deleted. The line itself is a copy whose quantity is the count
+  /// being sold, not the stock.
+  AddEditItemModel? catalogProductFor(AddEditItemModel cartItem) {
+    final key = cartItem.identityKey;
+    final index = allProducts.indexWhere((p) => p.identityKey == key);
+    return index < 0 ? null : allProducts[index];
   }
 
   void deleteCategory(String category) {
@@ -190,9 +209,9 @@ class HomeSceenController extends GetxController {
   }
 
   /// Creates a catalog row from the till with only what it takes to ring the
-  /// item up now: a name, a category and a price. Cost, TVA, profit and stock
-  /// stay unset for the item screen to fill in later — a cashier with a
-  /// customer waiting cannot stop to work out margins.
+  /// item up now: a name, a category, a price and the stock on the shelf.
+  /// Cost, TVA and profit stay unset for the item screen to fill in later — a
+  /// cashier with a customer waiting cannot stop to work out margins.
   ///
   /// Returns null when [barcode] already belongs to another product: two rows
   /// sharing a barcode share an [AddEditItemModel.identityKey], and every
@@ -202,6 +221,7 @@ class HomeSceenController extends GetxController {
     required String barcode,
     required double sellingPrice,
     String? category,
+    int quantity = 0,
   }) {
     final code = barcode.trim();
     if (code.isNotEmpty && findByBarcode(code) != null) return null;
@@ -215,7 +235,7 @@ class HomeSceenController extends GetxController {
       description: description.trim(),
       category: trimmedCategory,
       barcode: code,
-      quantity: 0,
+      quantity: quantity,
       sellingPrice: Money.round(sellingPrice),
     );
     addProduct(product);

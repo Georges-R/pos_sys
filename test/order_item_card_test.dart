@@ -34,17 +34,18 @@ void main() {
     expect(find.text('\$8.32'), findsOneWidget);
   });
 
-  // The cart sidebar is a fixed 400pt. A long name next to a four-figure
-  // total is the worst case the row has to survive.
+  // The cart panel is narrowest on a 900pt window, where the scanner column
+  // takes its 380pt minimum. A long name next to a four-figure total is the
+  // worst case the row has to survive.
   for (final name in ['testtt', 'Imported Belgian Dark Chocolate 200g Bar']) {
-    testWidgets('fits the 400pt sidebar: "${name.split(' ').first}"',
+    testWidgets('fits the narrowest cart panel: "${name.split(' ').first}"',
         (tester) async {
       tester.view.physicalSize = const Size(1366, 1024);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(
-        _host(400, name: name, qty: 12, unitPrice: 1234.56),
+        _host(520, name: name, qty: 12, unitPrice: 1234.56),
       );
       expect(tester.takeException(), isNull);
     });
@@ -76,5 +77,29 @@ void main() {
     await tester.pump();
 
     expect([increases, decreases, removals], [1, 1, 1]);
+  });
+
+  testWidgets('a long press reaches the card', (tester) async {
+    var longPresses = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 600,
+            child: OrderItemCard(
+              productName: 'testtt',
+              quantity: 1,
+              unitPrice: 4.16,
+              onLongPress: () => longPresses++,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.longPress(find.text('testtt'));
+    await tester.pump();
+
+    expect(longPresses, 1);
   });
 }

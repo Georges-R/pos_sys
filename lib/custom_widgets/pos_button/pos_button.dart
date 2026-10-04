@@ -10,6 +10,7 @@ class PosButton extends StatelessWidget {
     this.backgroundColor,
     this.textColor,
     this.iconColor,
+    this.iconSize,
     this.padding = const EdgeInsets.symmetric(horizontal: 32.0, vertical: 20.0),
     this.textStyle,
     this.width,
@@ -22,6 +23,7 @@ class PosButton extends StatelessWidget {
   final Color? backgroundColor;
   final Color? textColor;
   final Color? iconColor;
+  final double? iconSize;
   final EdgeInsetsGeometry padding;
   final TextStyle? textStyle;
   final double? width;
@@ -43,11 +45,12 @@ class PosButton extends StatelessWidget {
         children: [
           if (icon != null)
             Icon(icon,
+                size: iconSize,
                 color: iconColor ?? textColor ?? theme.colorScheme.onPrimary),
           if (icon != null) const SizedBox(width: 8.0),
           Text(
             text,
-            style: Styles.inputTextStyleWhite,
+            style: textStyle ?? Styles.inputTextStyleWhite,
           ),
         ],
       ),

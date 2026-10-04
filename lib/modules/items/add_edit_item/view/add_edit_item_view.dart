@@ -34,7 +34,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       controller: controller.descriptionController,
                       label: 'Description',
                       hint: 'Enter description',
-                      isRequired: true,
                     ),
                     Styles.verticalSpacer,
                     Obx(() {
@@ -54,7 +53,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                         },
                         label: 'Category',
                         hint: 'Select category',
-                        isRequired: true,
                       );
                     }),
                     Styles.verticalSpacer,
@@ -62,7 +60,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       controller: controller.barcodeController,
                       label: "Barcode",
                       hint: "Scan or type a barcode",
-                      isRequired: true,
                     ),
                     Styles.verticalSpacer,
                     FormInputField(
@@ -71,7 +68,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter quantity',
                       keyboardType: TextInputType.number,
                       allowDecimal: false,
-                      isRequired: true,
                     ),
                     Styles.verticalSpacer,
                     FormInputField(
@@ -80,7 +76,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter cost price',
                       keyboardType: TextInputType.number,
                       allowDecimal: true,
-                      isRequired: true,
                       onChange: () => controller.calculatePriceAfterTva(),
                     ),
                     Styles.verticalSpacer,
@@ -90,7 +85,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter TVA percentage',
                       keyboardType: TextInputType.number,
                       allowDecimal: true,
-                      isRequired: true,
                       onChange: () => controller.calculatePriceAfterTva(),
                     ),
                     Styles.verticalSpacer,
@@ -100,7 +94,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter price after TVA',
                       keyboardType: TextInputType.number,
                       allowDecimal: true,
-                      isRequired: true,
                       onChange: () {
                         controller.calculateTvaPercent();
                         controller.calculateSellingPrice();
@@ -113,7 +106,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter profit percentage',
                       keyboardType: TextInputType.number,
                       allowDecimal: true,
-                      isRequired: true,
                       onChange: () => controller.calculateSellingPrice(),
                     ),
                     Styles.verticalSpacer,
@@ -123,7 +115,6 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter selling price',
                       keyboardType: TextInputType.number,
                       allowDecimal: true,
-                      isRequired: true,
                       onChange: () => controller.calculateProfitPercent(),
                     ),
                     Styles.verticalSpacer,

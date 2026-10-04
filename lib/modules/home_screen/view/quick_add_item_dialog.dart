@@ -11,11 +11,15 @@ import 'package:pos/themes/styles/styles.dart';
 /// Creates the catalog row for a barcode that scanned up empty, without
 /// leaving the till.
 ///
-/// Only what it takes to sell the item right now is asked for: name, category
-/// and selling price, with the scanned barcode pre-filled and still editable
-/// in case the scan mangled it. Cost, TVA, profit and stock are left for the
-/// item screen — a cashier with a customer waiting cannot stop to work out
-/// margins.
+/// Only what it takes to sell the item right now is asked for: name, category,
+/// selling price and the stock on the shelf, with the scanned barcode
+/// pre-filled and still editable in case the scan mangled it. Cost, TVA and
+/// profit are left for the item screen — a cashier with a customer waiting
+/// cannot stop to work out margins.
+///
+/// None of it is mandatory: a blank price or stock saves as 0. The one check
+/// left is that the barcode is not already another item's, since two items on
+/// one barcode would make every later scan, edit and delete ambiguous.
 ///
 /// Pops the created product, or null if the cashier backed out.
 class QuickAddItemDialog extends StatefulWidget {
@@ -50,6 +54,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _barcodeController;
   late final TextEditingController _priceController;
+  late final TextEditingController _quantityController;
   late final TextEditingController _newCategoryController;
 
   String? _selectedCategory;
@@ -60,6 +65,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
     _nameController = TextEditingController();
     _barcodeController = TextEditingController(text: widget.barcode);
     _priceController = TextEditingController();
+    _quantityController = TextEditingController();
     _newCategoryController = TextEditingController();
 
     // The category the till is filtered on is almost always the one being
@@ -77,15 +83,20 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
     _nameController.dispose();
     _barcodeController.dispose();
     _priceController.dispose();
+    _quantityController.dispose();
     _newCategoryController.dispose();
     super.dispose();
   }
 
   bool get _isCreatingCategory => _selectedCategory == _newCategoryOption;
 
-  String? get _category => _isCreatingCategory
-      ? _newCategoryController.text.trim()
-      : _selectedCategory;
+  /// Null when nothing was picked or the new category name was left blank.
+  String? get _category {
+    final name = _isCreatingCategory
+        ? _newCategoryController.text.trim()
+        : _selectedCategory;
+    return (name == null || name.isEmpty) ? null : name;
+  }
 
   String? _validateBarcode(String? value) {
     final code = value?.trim() ?? '';
@@ -98,13 +109,6 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
     return null;
   }
 
-  String? _validatePrice(String? value) {
-    final price = double.tryParse(value?.trim() ?? '');
-    if (price == null) return 'Please enter a valid number';
-    if (price < 0) return 'Price cannot be negative';
-    return null;
-  }
-
   void _save() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -113,6 +117,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
       barcode: _barcodeController.text,
       sellingPrice: double.tryParse(_priceController.text.trim()) ?? 0,
       category: _category,
+      quantity: int.tryParse(_quantityController.text.trim()) ?? 0,
     );
 
     if (product == null) {
@@ -147,7 +152,6 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                   controller: _nameController,
                   label: 'Name',
                   hint: 'Enter item name',
-                  isRequired: true,
                 ),
                 Styles.verticalSpacer,
                 Obx(
@@ -169,7 +173,6 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                         setState(() => _selectedCategory = value),
                     label: 'Category',
                     hint: 'Select category',
-                    isRequired: true,
                   ),
                 ),
                 if (_isCreatingCategory) ...[
@@ -178,7 +181,6 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                     controller: _newCategoryController,
                     label: 'New category name',
                     hint: 'Enter category name',
-                    isRequired: true,
                   ),
                 ],
                 Styles.verticalSpacer,
@@ -186,7 +188,6 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                   controller: _barcodeController,
                   label: 'Barcode',
                   hint: 'Scan or type a barcode',
-                  isRequired: true,
                   validator: _validateBarcode,
                 ),
                 Styles.verticalSpacer,
@@ -196,9 +197,14 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                   hint: 'Enter selling price',
                   keyboardType: TextInputType.number,
                   allowDecimal: true,
-                  isRequired: true,
+                ),
+                Styles.verticalSpacer,
+                FormInputField(
+                  controller: _quantityController,
+                  label: 'Stock Quantity',
+                  hint: 'Enter stock quantity',
+                  keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.done,
-                  customValidator: _validatePrice,
                 ),
               ],
             ),

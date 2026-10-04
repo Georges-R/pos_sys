@@ -7,10 +7,10 @@ import 'package:pos/core/routes/paths.dart';
 import 'package:pos/custom_widgets/custom_left_drawer/custom_left_drawer.dart';
 import 'package:pos/custom_widgets/order_item_card/order_item_card.dart';
 import 'package:pos/custom_widgets/pos_button/pos_button.dart';
-import 'package:pos/custom_widgets/product_card/product_card.dart';
 import 'package:pos/custom_widgets/totals_tiles/totals_tiles.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
 import 'package:pos/modules/home_screen/controller/home_sceen_controller.dart';
+import 'package:pos/modules/home_screen/view/edit_item_dialog.dart';
 import 'package:pos/modules/home_screen/view/quick_add_item_dialog.dart';
 import 'package:pos/modules/settings/controller/settings_controller.dart';
 import 'package:pos/themes/styles/styles.dart';
@@ -27,6 +27,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
   final SettingsController settingsController = Get.find();
   final TextEditingController _barcodeController = TextEditingController();
   final FocusNode _barcodeFocus = FocusNode();
+  final ScrollController _cartScroll = ScrollController();
   Timer? _scanDebounce;
 
   @override
@@ -77,12 +78,14 @@ class _HomeScreenViewState extends State<HomeScreenView> {
   Future<void> _processScannedCode(String code) async {
     if (code.isEmpty) return;
 
+    final linesBefore = controller.cart.length;
     final found = controller.findAndAddByBarcode(code);
     _barcodeController.clear();
     _firstKeystrokeAt = null;
 
     if (found) {
-      _barcodeFocus.requestFocus();
+      if (controller.cart.length > linesBefore) _scrollCartToEnd();
+      _refocusScanner();
       return;
     }
     await _offerToCreateProduct(code);
@@ -117,7 +120,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
 
     if (!mounted) return;
     if (wantsToCreate != true) {
-      _barcodeFocus.requestFocus();
+      _refocusScanner();
       return;
     }
 
@@ -129,8 +132,36 @@ class _HomeScreenViewState extends State<HomeScreenView> {
         'Item created',
         '${product.description} was added to the catalog and this sale',
       );
+      _scrollCartToEnd();
     }
+    _refocusScanner();
+  }
+
+  /// Puts the cursor back in the barcode field so the next item can be
+  /// scanned straight away, whatever the cashier just did.
+  void _refocusScanner() {
+    if (!mounted) return;
     _barcodeFocus.requestFocus();
+  }
+
+  /// Opens another screen and, once the cashier comes back to the till,
+  /// leaves the cursor in the barcode field again.
+  Future<void> _openAndReturnToScanner(String path, {dynamic arguments}) async {
+    await Get.toNamed(path, arguments: arguments);
+    _refocusScanner();
+  }
+
+  /// A new line goes to the bottom of the cart. Once the cart is longer than
+  /// the screen, that is out of sight, so follow it down.
+  void _scrollCartToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_cartScroll.hasClients) return;
+      _cartScroll.animateTo(
+        _cartScroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   @override
@@ -139,12 +170,12 @@ class _HomeScreenViewState extends State<HomeScreenView> {
     _barcodeController.removeListener(_onBarcodeChanged);
     _barcodeController.dispose();
     _barcodeFocus.dispose();
+    _cartScroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final settingsController = Get.find<SettingsController>();
     return Scaffold(
       appBar: AppBar(
         title: Obx(() => Text(settingsController.storeName.value.isNotEmpty
@@ -154,10 +185,13 @@ class _HomeScreenViewState extends State<HomeScreenView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () => Get.toNamed(Paths.settingsScreen),
+            onPressed: () => _openAndReturnToScanner(Paths.settingsScreen),
           ),
         ],
       ),
+      onDrawerChanged: (isOpen) {
+        if (!isOpen) _refocusScanner();
+      },
       drawer: CustomLeftDrawer(
         items: [
           'Item Management',
@@ -166,227 +200,206 @@ class _HomeScreenViewState extends State<HomeScreenView> {
           'Sales History',
         ],
         onItemTap: [
-          () => Get.toNamed(Paths.addEditItemScreen,
+          () => _openAndReturnToScanner(Paths.addEditItemScreen,
               arguments: controller.selectedCategory.value),
-          () => Get.toNamed(Paths.itemListingScreen),
-          () => Get.toNamed(Paths.clients),
-          () => Get.toNamed(Paths.salesListingScreen),
+          () => _openAndReturnToScanner(Paths.itemListingScreen),
+          () => _openAndReturnToScanner(Paths.clients),
+          () => _openAndReturnToScanner(Paths.salesListingScreen),
         ],
       ),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                Container(
-                  height: 100,
-                  color: Colors.grey[100],
-                  child: Obx(
-                    () => Row(
-                      children: [
-                        Expanded(
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: controller.categories.length,
-                            itemBuilder: (context, index) {
-                              final category = controller.categories[index];
-                              return GestureDetector(
-                                onTap: () => controller.selectedCategory.value =
-                                    category,
-                                onLongPress: () => _showDeleteCategoryDialog(
-                                    context, category),
-                                child: Obx(() {
-                                  final isSelected =
-                                      controller.selectedCategory.value ==
-                                          category;
-                                  return Container(
-                                    margin: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 16),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 18, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? Colors.blue
-                                          : Colors.grey.shade300,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        category,
-                                        style: TextStyle(
-                                          color: isSelected
-                                              ? Colors.white
-                                              : Colors.black,
-                                          fontWeight: isSelected
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                          fontSize: 19,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              );
-                            },
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add, color: Colors.blue),
-                          onPressed: () =>
-                              controller.showAddCategoryDialog(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Obx(
-                    () => GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: controller.filteredProducts.length,
-                      // Six fixed columns squeezed the tiles to nothing on
-                      // any window narrower than a full-size tablet.
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 200,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        // Each tile carries a name plus both currencies, so
-                        // it needs to be a touch taller than it is wide.
-                        childAspectRatio: 1.15,
-                      ),
-                      itemBuilder: (context, index) {
-                        final p = controller.filteredProducts[index];
-                        return ProductCard(
-                          productName: p.description ?? '',
-                          price: p.sellingPrice ?? 0,
-                          exchangeRate: settingsController.exchangeRate.value,
-                          onAddToCart: () => controller.addToCart(p),
-                          onLongPress: () =>
-                              _showDeleteProductDialog(context, p),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 400,
-            color: Colors.grey[100],
-            child: Column(
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: TextField(
-                    controller: _barcodeController,
-                    focusNode: _barcodeFocus,
-                    textInputAction: TextInputAction.done,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                        hintText: 'Scan barcode here',
-                        prefixIcon: const Icon(Icons.qr_code_scanner),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white,
-                        hintStyle: Styles.hintTextStyle,
-                        labelStyle: Styles.labelTextStyle),
-                    onSubmitted: (value) {
-                      final code = value.trim();
-                      if (code.isNotEmpty) _processScannedCode(code);
-                    },
-                  ),
-                ),
-                Expanded(
-                  child: Obx(
-                    () => ListView.builder(
-                      itemCount: controller.cart.length,
-                      itemBuilder: (context, index) {
-                        final item = controller.cart[index];
-                        return OrderItemCard(
-                          productName: item.description ?? '',
-                          quantity: item.quantity ?? 0,
-                          unitPrice: item.sellingPrice ?? 0,
-                          onIncrease: () => controller.updateQuantity(index, 1),
-                          onDecrease: () =>
-                              controller.updateQuantity(index, -1),
-                          onRemove: () => controller.removeItem(index),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                // Same total tiles as the checkout screen; the 400px sidebar
-                // is below the widget's breakpoint, so they stack vertically.
-                Obx(
-                  () {
-                    final rate = settingsController.exchangeRate.value;
-                    final count = controller.cart.fold<int>(
-                        0, (sum, item) => sum + (item.quantity ?? 0));
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                      child: TotalsTiles(
-                        totalUSD: controller.total,
-                        totalLBP: controller.total * rate,
-                        amountSize: 44,
-                        usdFootnote: count == 1 ? '1 item' : '$count items',
-                        lbpFootnote: rate > 0
-                            ? '1 USD  =  ${NumberFormat('#,###').format(rate)} LBP'
-                            : 'Exchange rate not set',
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                // Full width so the button's edges line up with the tiles.
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: PosButton(
-                      text: 'Checkout',
-                      icon: Icons.shopping_cart_checkout,
-                      onPressed: () {
-                        if (controller.cart.isEmpty) {
-                          Notify.error('Empty cart', 'Add an item first');
-                          return;
-                        }
-                        Get.toNamed(Paths.checkout,
-                            arguments: controller.cart);
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // A cashier needs to be able to abandon a basket; clearCart()
-                // existed but nothing on screen called it.
-                Obx(
-                  () => TextButton.icon(
-                    onPressed: controller.cart.isEmpty
-                        ? null
-                        : () => _confirmClearCart(context),
-                    icon: const Icon(Icons.remove_shopping_cart),
-                    label: const Text('Clear cart'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // The cart takes the wide side; the scanner and totals column
+          // grows with the window but never squeezes the cart out.
+          final sideWidth = (constraints.maxWidth * 0.4).clamp(380.0, 560.0);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildCart()),
+              Container(
+                width: sideWidth,
+                color: Colors.grey[100],
+                child: _buildScannerAndTotals(context),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  void _confirmClearCart(BuildContext context) {
-    showDialog<void>(
+  Widget _buildCart() {
+    return Obx(() {
+      if (controller.cart.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.qr_code_scanner, size: 72, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'Scan a barcode to start a sale',
+                style: TextStyle(fontSize: 22, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        );
+      }
+      return ListView.builder(
+        controller: _cartScroll,
+        padding: const EdgeInsets.all(12),
+        itemCount: controller.cart.length,
+        itemBuilder: (context, index) {
+          final item = controller.cart[index];
+          return OrderItemCard(
+            productName: item.description ?? '',
+            quantity: item.quantity ?? 0,
+            unitPrice: item.sellingPrice ?? 0,
+            onIncrease: () {
+              controller.updateQuantity(index, 1);
+              _refocusScanner();
+            },
+            onDecrease: () {
+              controller.updateQuantity(index, -1);
+              _refocusScanner();
+            },
+            onRemove: () {
+              controller.removeItem(index);
+              _refocusScanner();
+            },
+            onLongPress: () => _editCartItem(item),
+          );
+        },
+      );
+    });
+  }
+
+  Widget _buildScannerAndTotals(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: TextField(
+            controller: _barcodeController,
+            focusNode: _barcodeFocus,
+            textInputAction: TextInputAction.done,
+            autofocus: true,
+            // The next scan has to land here whatever the cashier last
+            // touched. On a tablet, touching anywhere outside a text field
+            // drops its focus by default, and the scanner's keystrokes then
+            // go nowhere.
+            onTapOutside: (_) {},
+            style: const TextStyle(fontSize: 22),
+            decoration: InputDecoration(
+              hintText: 'Scan barcode here',
+              prefixIcon: const Icon(Icons.qr_code_scanner, size: 30),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              filled: true,
+              fillColor: Colors.white,
+              hintStyle: Styles.hintTextStyle.copyWith(fontSize: 20),
+            ),
+            onSubmitted: (value) {
+              final code = value.trim();
+              if (code.isNotEmpty) {
+                _processScannedCode(code);
+              } else {
+                _refocusScanner();
+              }
+            },
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Obx(() {
+              final rate = settingsController.exchangeRate.value;
+              final count = controller.cart
+                  .fold<int>(0, (sum, item) => sum + (item.quantity ?? 0));
+              return TotalsTiles(
+                totalUSD: controller.total,
+                totalLBP: controller.total * rate,
+                amountSize: 96,
+                // One above the other at any width.
+                stackBelowWidth: double.infinity,
+                usdFootnote: count == 1 ? '1 item' : '$count items',
+                lbpFootnote: rate > 0
+                    ? '1 USD  =  ${NumberFormat('#,###').format(rate)} LBP'
+                    : 'Exchange rate not set',
+              );
+            }),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: PosButton(
+            text: 'Checkout',
+            icon: Icons.shopping_cart_checkout,
+            iconSize: 34,
+            padding: const EdgeInsets.symmetric(vertical: 26),
+            textStyle: Styles.inputTextStyleWhite
+                .copyWith(fontSize: 26, fontWeight: FontWeight.w700),
+            onPressed: () {
+              if (controller.cart.isEmpty) {
+                Notify.error('Empty cart', 'Add an item first');
+                _refocusScanner();
+                return;
+              }
+              _openAndReturnToScanner(Paths.checkout,
+                  arguments: controller.cart);
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        // A cashier needs to be able to abandon a basket; clearCart()
+        // existed but nothing on screen called it.
+        Obx(
+          () => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextButton.icon(
+              onPressed: controller.cart.isEmpty
+                  ? null
+                  : () => _confirmClearCart(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                textStyle: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontSize: 21, fontWeight: FontWeight.w600),
+              ),
+              icon: const Icon(Icons.remove_shopping_cart, size: 28),
+              label: const Text('Clear cart'),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  /// Long-pressing a cart line edits the catalog row behind it.
+  Future<void> _editCartItem(AddEditItemModel cartItem) async {
+    final product = controller.catalogProductFor(cartItem);
+    if (product == null) {
+      Notify.error('Not in catalog',
+          '${cartItem.description} has been deleted from the catalog');
+      _refocusScanner();
+      return;
+    }
+    final saved = await EditItemDialog.show(context, product: product);
+    if (!mounted) return;
+    if (saved == true) {
+      Notify.success('Item updated', '${product.description} was saved');
+    }
+    _refocusScanner();
+  }
+
+  Future<void> _confirmClearCart(BuildContext context) async {
+    await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear cart'),
@@ -406,81 +419,6 @@ class _HomeScreenViewState extends State<HomeScreenView> {
         ],
       ),
     );
-  }
-
-  void _showDeleteProductDialog(
-      BuildContext context, AddEditItemModel product) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Product'),
-        content:
-            Text('Are you sure you want to delete "${product.description}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              controller.deleteProduct(product);
-              Navigator.of(context).pop();
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteCategoryDialog(BuildContext context, String category) {
-    final productsInCategory =
-        controller.allProducts.where((p) => p.category == category).toList();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Category'),
-        content: Text(
-            'Are you sure you want to delete "$category"? This will also delete ${productsInCategory.length} product(s) in this category.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (productsInCategory.isNotEmpty) {
-                Navigator.of(context).pop();
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Confirm Deletion'),
-                    content: const Text(
-                        'This category contains products. Deleting it will remove all associated products. Are you absolutely sure?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          controller.deleteCategory(category);
-                          Navigator.of(context).pop();
-                        },
-                        child: const Text('Yes, Delete All'),
-                      ),
-                    ],
-                  ),
-                );
-              } else {
-                controller.deleteCategory(category);
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+    _refocusScanner();
   }
 }

@@ -23,230 +23,97 @@ class ListingItemsView extends GetView<HomeSceenController> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Obx(() => TextField(
-                        controller: searchCtrl,
-                        onChanged: (v) => searchQuery.value = v,
-                        decoration: InputDecoration(
-                          hintText: 'Search products...',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: searchQuery.value.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    searchCtrl.clear();
-                                    searchQuery.value = '';
-                                  },
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                          contentPadding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 12),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none),
-                        ),
-                      )),
-                ),
-              ],
-            ),
+            child: Obx(() => TextField(
+                  controller: searchCtrl,
+                  // A scanner types into whatever has focus, so an item can
+                  // be looked up by scanning it as soon as the screen opens.
+                  autofocus: true,
+                  onChanged: (v) => searchQuery.value = v,
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or barcode...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: searchQuery.value.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              searchCtrl.clear();
+                              searchQuery.value = '';
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 12),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
+                )),
           ),
-
-          // Content
           Expanded(
             child: Obx(() {
               final q = searchQuery.value.trim().toLowerCase();
               // ListView.builder runs its item builder outside this closure,
-              // so reads in there are not tracked. Touching the product list
-              // here is what makes the screen rebuild after an add or delete.
-              final products = controller.allProducts.toList();
+              // so reads in there are not tracked. Building the list here is
+              // what makes the screen rebuild after an add or delete.
+              final products = controller.allProducts.where((p) {
+                if (q.isEmpty) return true;
+                return (p.description ?? '').toLowerCase().contains(q) ||
+                    (p.barcode ?? '').toLowerCase().contains(q);
+              }).toList();
 
-              if (controller.categories.isEmpty) {
-                return const Center(child: Text('No categories available'));
+              if (products.isEmpty) {
+                return Center(
+                  child: Text(
+                    q.isEmpty ? 'No items yet' : 'No items match "$q"',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                );
               }
 
               return ListView.separated(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                itemCount: controller.categories.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemCount: products.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, index) {
-                  final category = controller.categories[index];
-                  final rawProducts =
-                      products.where((p) => p.category == category).toList();
-
-                  final filteredProducts = rawProducts.where((p) {
-                    if (q.isEmpty) return true;
-                    return (p.description ?? '').toLowerCase().contains(q);
-                  }).toList();
-
-                  return Obx(() {
-                    final isExpanded =
-                        controller.expandedCategories[category] ?? false;
-                    return Card(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      clipBehavior: Clip.hardEdge,
-                      child: Column(
-                        children: [
-                          InkWell(
-                            onTap: () =>
-                                controller.toggleCategoryExpanded(category),
-                            child: Container(
-                              color: Colors.grey[50],
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 14),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: Colors.blue.shade100,
-                                    child: Text(
-                                      category.isNotEmpty
-                                          ? category[0].toUpperCase()
-                                          : '?',
-                                      style: const TextStyle(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          category,
-                                          style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600),
-                                        ),
-                                        if (filteredProducts.isEmpty)
-                                          const SizedBox.shrink()
-                                        else
-                                          Text(
-                                            '${filteredProducts.length} item(s)',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600]),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      '${rawProducts.length}',
-                                      style: const TextStyle(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Icon(
-                                    isExpanded
-                                        ? Icons.expand_less
-                                        : Icons.expand_more,
-                                    color: Colors.grey[700],
-                                  ),
-                                ],
-                              ),
-                            ),
+                  final product = products[index];
+                  return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    title: Text(
+                      product.description ?? 'No Name',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      [
+                        if ((product.barcode ?? '').isNotEmpty)
+                          product.barcode!,
+                        'Stock: ${product.quantity ?? 0}',
+                      ].join('  ·  '),
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Edit',
+                          icon: const Icon(Icons.edit, color: Colors.blue),
+                          onPressed: () => Get.toNamed(
+                            Paths.addEditItemScreen,
+                            arguments: product,
                           ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeInOut,
-                            child: ConstrainedBox(
-                              constraints: isExpanded
-                                  ? const BoxConstraints()
-                                  : const BoxConstraints(maxHeight: 0),
-                              child: Column(
-                                children: [
-                                  if (filteredProducts.isEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16, vertical: 12),
-                                      child: Text(
-                                        'No items match your search in this category.',
-                                        style:
-                                            TextStyle(color: Colors.grey[600]),
-                                      ),
-                                    )
-                                  else
-                                    ListView.separated(
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      shrinkWrap: true,
-                                      itemCount: filteredProducts.length,
-                                      separatorBuilder: (_, __) =>
-                                          const Divider(height: 1),
-                                      itemBuilder: (context, pi) {
-                                        final product = filteredProducts[pi];
-                                        return ListTile(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 16, vertical: 6),
-                                          leading: const Icon(
-                                              Icons.inventory_2_outlined,
-                                              color: Colors.blue),
-                                          title: Text(
-                                            '${product.description ?? 'No Name'} (${product.quantity ?? 0})',
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w600),
-                                          ),
-                                          subtitle: product.sellingPrice != null
-                                              ? Text(
-                                                  'Price: ${product.sellingPrice}',
-                                                  style: TextStyle(
-                                                      color: Colors.grey[600]),
-                                                )
-                                              : null,
-                                          trailing: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              IconButton(
-                                                tooltip: 'Edit',
-                                                icon: const Icon(Icons.edit,
-                                                    color: Colors.blue),
-                                                onPressed: () {
-                                                  Get.toNamed(
-                                                    Paths.addEditItemScreen,
-                                                    arguments: product,
-                                                  );
-                                                },
-                                              ),
-                                              IconButton(
-                                                tooltip: 'Delete',
-                                                icon: const Icon(Icons.delete,
-                                                    color: Colors.red),
-                                                onPressed: () =>
-                                                    _showDeleteProductDialog(
-                                                        context, product),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  const SizedBox(height: 8),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  });
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () =>
+                              _showDeleteProductDialog(context, product),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               );
             }),
