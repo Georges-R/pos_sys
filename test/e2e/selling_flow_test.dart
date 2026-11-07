@@ -335,6 +335,76 @@ void main() {
     });
   });
 
+  group('one scan rings up one item', () {
+    Finder scanner() => find.widgetWithText(TextField, 'Scan barcode here');
+
+    Future<void> scan(WidgetTester tester, String code) async {
+      await tester.enterText(scanner(), code);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+    }
+
+    testWidgets('when the field gets the cleared code back', (tester) async {
+      // An IME or the OS text service committing its stale composition
+      // after the field was cleared puts the whole code back at once.
+      final home = await openTill(tester);
+      await tester.enterText(scanner(), '1001');
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(home.cart.single.quantity, 1);
+
+      tester.testTextInput.updateEditingValue(const TextEditingValue(
+          text: '1001', selection: TextSelection.collapsed(offset: 4)));
+      await settle(tester);
+
+      expect(home.cart.single.quantity, 1);
+      expect(tester.widget<TextField>(scanner()).controller!.text, isEmpty,
+          reason: 'the next scan must not be appended to the stale code');
+    });
+
+    testWidgets('when the scanner sends the same code twice in a burst',
+        (tester) async {
+      final home = await openTill(tester);
+      await scan(tester, '1001');
+      await tester.pump(const Duration(milliseconds: 60));
+      await scan(tester, '1001');
+      await settle(tester);
+
+      expect(home.cart.single.quantity, 1);
+    });
+
+    testWidgets('when Enter lands after the burst was already rung up',
+        (tester) async {
+      final home = await openTill(tester);
+      await tester.enterText(scanner(), '1001');
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+
+      expect(home.cart.single.quantity, 1);
+    });
+
+    testWidgets('but the same item scanned again a moment later adds another',
+        (tester) async {
+      final home = await openTill(tester);
+      await scan(tester, '1001');
+      await tester.pump(const Duration(milliseconds: 700));
+      await scan(tester, '1001');
+      await settle(tester);
+
+      expect(home.cart.single.quantity, 2);
+    });
+
+    testWidgets('and a different item right after still goes in',
+        (tester) async {
+      final home = await openTill(tester);
+      await scan(tester, '1001');
+      await scan(tester, '2001');
+      await settle(tester);
+
+      expect(home.cart.map((i) => i.description), ['Espresso', 'Chips']);
+    });
+  });
+
   group('editing an item from the cart', () {
     Future<HomeSceenController> openEditor(WidgetTester tester) async {
       final home = await openTill(tester);
@@ -609,8 +679,8 @@ void main() {
     testWidgets('a real barcode starting with T still finds its product',
         (tester) async {
       final home = await openTill(tester, exchangeRate: 89500);
-      home.allProducts.add(product(
-          description: 'Tea', category: 'Drinks', barcode: 'T100'));
+      home.allProducts.add(
+          product(description: 'Tea', category: 'Drinks', barcode: 'T100'));
       await tester.enterText(scanner(), 'T100\n');
       await settle(tester);
 

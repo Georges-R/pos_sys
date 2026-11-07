@@ -48,6 +48,16 @@ class _HomeScreenViewState extends State<HomeScreenView> {
   static const int _minScanLength = 4;
   DateTime? _firstKeystrokeAt;
 
+  /// The same code arriving again this soon is the scan that was just rung
+  /// up coming back, not a second item: a scanner that sends its code twice,
+  /// or an IME / OS text service committing its stale text after the field
+  /// was cleared, which the burst timer then took for a fresh scan. Either
+  /// way the item went into the cart twice. Re-scanning the same item by
+  /// hand takes longer than this, so a genuine second item still counts.
+  static const Duration _repeatScanGuard = Duration(milliseconds: 400);
+  String? _lastScannedCode;
+  Timer? _repeatGuardTimer;
+
   void _onBarcodeChanged() {
     _scanDebounce?.cancel();
 
@@ -59,30 +69,50 @@ class _HomeScreenViewState extends State<HomeScreenView> {
     _firstKeystrokeAt ??= DateTime.now();
 
     if (raw.contains('\n') || raw.contains('\r')) {
-      final code = raw.replaceAll(RegExp(r'[\r\n]'), '').trim();
-      _processScannedCode(code);
+      _submitScan(raw);
       return;
     }
 
-    final startedAt = _firstKeystrokeAt;
+    final startedAt = _firstKeystrokeAt!;
     _scanDebounce = Timer(_scanBurstWindow, () {
       final code = _barcodeController.text.trim();
-      if (code.length < _minScanLength || startedAt == null) return;
+      if (code.length < _minScanLength) return;
       final typedIn = DateTime.now().difference(startedAt);
       // Faster than a human could have typed it: treat it as a scan.
-      if (typedIn <= _scanBurstWindow * 2) {
-        _processScannedCode(code);
-      }
+      if (typedIn <= _scanBurstWindow * 2) _submitScan(code);
     });
   }
 
-  Future<void> _processScannedCode(String code) async {
-    if (code.isEmpty) return;
-
-    final linesBefore = controller.cart.length;
-    final found = controller.findAndAddByBarcode(code);
+  /// The only way a code gets from the field to the cart. Enter, a newline
+  /// in the text and the burst timer can each see the same scan, so they all
+  /// come through here, and a repeat of the last code is dropped.
+  void _submitScan(String raw) {
+    _scanDebounce?.cancel();
+    final code = raw.replaceAll(RegExp(r'[\r\n]'), '').trim();
+    // Cleared even for a dropped repeat, or the next scan is appended to it.
     _barcodeController.clear();
     _firstKeystrokeAt = null;
+
+    if (code.isEmpty || _isRepeatOfLastScan(code)) {
+      _refocusScanner();
+      return;
+    }
+    _processScannedCode(code);
+  }
+
+  bool _isRepeatOfLastScan(String code) {
+    final isRepeat = code == _lastScannedCode;
+    _lastScannedCode = code;
+    // A repeat restarts the guard, so a scanner rereading the code over and
+    // over while held on the item still counts once.
+    _repeatGuardTimer?.cancel();
+    _repeatGuardTimer = Timer(_repeatScanGuard, () => _lastScannedCode = null);
+    return isRepeat;
+  }
+
+  Future<void> _processScannedCode(String code) async {
+    final linesBefore = controller.cart.length;
+    final found = controller.findAndAddByBarcode(code);
 
     if (found) {
       if (controller.cart.length > linesBefore) _scrollCartToEnd();
@@ -191,6 +221,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
   @override
   void dispose() {
     _scanDebounce?.cancel();
+    _repeatGuardTimer?.cancel();
     _barcodeController.removeListener(_onBarcodeChanged);
     _barcodeController.dispose();
     _barcodeFocus.dispose();
@@ -336,14 +367,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
               fillColor: Colors.white,
               hintStyle: Styles.hintTextStyle.copyWith(fontSize: 20),
             ),
-            onSubmitted: (value) {
-              final code = value.trim();
-              if (code.isNotEmpty) {
-                _processScannedCode(code);
-              } else {
-                _refocusScanner();
-              }
-            },
+            onSubmitted: _submitScan,
           ),
         ),
         // The totals fill all the height between the scanner and Checkout;
