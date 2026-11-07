@@ -130,6 +130,41 @@ class HomeSceenController extends GetxController {
     }
   }
 
+  /// Renames [from] everywhere it is used: the category list, every product
+  /// filed under it and the lines already rung up for them.
+  ///
+  /// Products are changed in place rather than replaced. A product without a
+  /// barcode is identified partly by its category, and the item screens hold
+  /// on to the very row they opened; a replaced row would leave them unable
+  /// to find it again when they save.
+  ///
+  /// Returns false when [to] is blank, unchanged, or already another
+  /// category's name: fixing a typo should never merge two categories.
+  bool renameCategory(String from, String to) {
+    final name = to.trim();
+    final index = categories.indexOf(from);
+    if (index < 0 || name.isEmpty || name == from) return false;
+    if (categories.contains(name)) return false;
+
+    categories[index] = name;
+    expandedCategories[name] = expandedCategories.remove(from) ?? false;
+    saveCategories();
+
+    for (final p in allProducts) {
+      if (p.category == from) p.category = name;
+    }
+    allProducts.refresh();
+    saveProducts();
+
+    for (final line in cart) {
+      if (line.category == from) line.category = name;
+    }
+    cart.refresh();
+
+    if (selectedCategory.value == from) selectedCategory.value = name;
+    return true;
+  }
+
   void deleteProduct(AddEditItemModel product) {
     final key = product.identityKey;
     final index = allProducts.indexWhere((p) => p.identityKey == key);
@@ -209,7 +244,8 @@ class HomeSceenController extends GetxController {
   }
 
   /// Creates a catalog row from the till with only what it takes to ring the
-  /// item up now: a name, a category, a price and the stock on the shelf.
+  /// item up now: a name, a category, a price and the stock on the shelf,
+  /// with the level to warn at.
   /// Cost, TVA and profit stay unset for the item screen to fill in later — a
   /// cashier with a customer waiting cannot stop to work out margins.
   ///
@@ -222,6 +258,7 @@ class HomeSceenController extends GetxController {
     required double sellingPrice,
     String? category,
     int quantity = 0,
+    int? lowStockWarning,
   }) {
     final code = barcode.trim();
     if (code.isNotEmpty && findByBarcode(code) != null) return null;
@@ -236,6 +273,7 @@ class HomeSceenController extends GetxController {
       category: trimmedCategory,
       barcode: code,
       quantity: quantity,
+      lowStockWarning: lowStockWarning,
       sellingPrice: Money.round(sellingPrice),
     );
     addProduct(product);

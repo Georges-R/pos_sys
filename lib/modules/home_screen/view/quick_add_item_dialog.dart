@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pos/custom_widgets/barcode_input_field/barcode_input_field.dart';
-import 'package:pos/custom_widgets/form_dropdown/form_dropdown.dart';
+import 'package:pos/custom_widgets/category_dropdown/category_dropdown.dart';
 import 'package:pos/custom_widgets/form_input_field/form_input_field.dart';
 import 'package:pos/custom_widgets/pos_button/pos_button.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
@@ -12,14 +12,15 @@ import 'package:pos/themes/styles/styles.dart';
 /// leaving the till.
 ///
 /// Only what it takes to sell the item right now is asked for: name, category,
-/// selling price and the stock on the shelf, with the scanned barcode
-/// pre-filled and still editable in case the scan mangled it. Cost, TVA and
-/// profit are left for the item screen — a cashier with a customer waiting
-/// cannot stop to work out margins.
+/// selling price, the stock on the shelf and the level to warn at, with the
+/// scanned barcode pre-filled and still editable in case the scan mangled it.
+/// Cost, TVA and profit are left for the item screen — a cashier with a
+/// customer waiting cannot stop to work out margins.
 ///
-/// None of it is mandatory: a blank price or stock saves as 0. The one check
-/// left is that the barcode is not already another item's, since two items on
-/// one barcode would make every later scan, edit and delete ambiguous.
+/// None of it is mandatory: a blank price or stock saves as 0, and a blank
+/// warning level means no warning. The one check left is that the barcode is
+/// not already another item's, since two items on one barcode would make
+/// every later scan, edit and delete ambiguous.
 ///
 /// Pops the created product, or null if the cashier backed out.
 class QuickAddItemDialog extends StatefulWidget {
@@ -55,6 +56,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
   late final TextEditingController _barcodeController;
   late final TextEditingController _priceController;
   late final TextEditingController _quantityController;
+  late final TextEditingController _lowStockController;
   late final TextEditingController _newCategoryController;
 
   String? _selectedCategory;
@@ -66,6 +68,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
     _barcodeController = TextEditingController(text: widget.barcode);
     _priceController = TextEditingController();
     _quantityController = TextEditingController();
+    _lowStockController = TextEditingController();
     _newCategoryController = TextEditingController();
 
     // The category the till is filtered on is almost always the one being
@@ -84,6 +87,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
     _barcodeController.dispose();
     _priceController.dispose();
     _quantityController.dispose();
+    _lowStockController.dispose();
     _newCategoryController.dispose();
     super.dispose();
   }
@@ -118,6 +122,7 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
       sellingPrice: double.tryParse(_priceController.text.trim()) ?? 0,
       category: _category,
       quantity: int.tryParse(_quantityController.text.trim()) ?? 0,
+      lowStockWarning: int.tryParse(_lowStockController.text.trim()),
     );
 
     if (product == null) {
@@ -154,26 +159,11 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                   hint: 'Enter item name',
                 ),
                 Styles.verticalSpacer,
-                Obx(
-                  () => FormDropdown<String>(
-                    value: _selectedCategory,
-                    items: [
-                      ..._controller.categories.map(
-                        (category) => DropdownMenuItem<String>(
-                          value: category,
-                          child: Text(category),
-                        ),
-                      ),
-                      const DropdownMenuItem<String>(
-                        value: _newCategoryOption,
-                        child: Text('+ New category'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _selectedCategory = value),
-                    label: 'Category',
-                    hint: 'Select category',
-                  ),
+                CategoryDropdown(
+                  value: _selectedCategory,
+                  newCategoryOption: _newCategoryOption,
+                  onChanged: (value) =>
+                      setState(() => _selectedCategory = value),
                 ),
                 if (_isCreatingCategory) ...[
                   Styles.verticalSpacer,
@@ -203,6 +193,13 @@ class _QuickAddItemDialogState extends State<QuickAddItemDialog> {
                   controller: _quantityController,
                   label: 'Stock Quantity',
                   hint: 'Enter stock quantity',
+                  keyboardType: TextInputType.number,
+                ),
+                Styles.verticalSpacer,
+                FormInputField(
+                  controller: _lowStockController,
+                  label: 'Low Stock Warning',
+                  hint: 'Warn when stock falls to this quantity',
                   keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.done,
                 ),

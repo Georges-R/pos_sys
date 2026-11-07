@@ -25,21 +25,27 @@ class CheckoutView extends GetView<CheckoutController> {
                       itemBuilder: (context, index) {
                         final item = controller.cartItems[index];
                         return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 8),
                           title: Text(
                             item.description ?? 'Product',
                             style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          subtitle: Text(
-                            'Price: \$${item.sellingPrice} x ${item.quantity}',
-                            style: const TextStyle(
-                              fontSize: 18,
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Price: \$${item.sellingPrice} x ${item.quantity}',
+                              style: const TextStyle(
+                                fontSize: 24,
+                              ),
                             ),
                           ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete),
+                            iconSize: 36,
+                            icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => controller.removeFromCart(index),
                           ),
                         );

@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import 'package:pos/core/helpers/money.dart';
 import 'package:pos/core/helpers/notify.dart';
 import 'package:pos/custom_widgets/barcode_input_field/barcode_input_field.dart';
-import 'package:pos/custom_widgets/form_dropdown/form_dropdown.dart';
+import 'package:pos/custom_widgets/category_dropdown/category_dropdown.dart';
 import 'package:pos/custom_widgets/form_input_field/form_input_field.dart';
 import 'package:pos/custom_widgets/pos_button/pos_button.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
@@ -48,6 +48,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _barcodeController;
   late final TextEditingController _quantityController;
+  late final TextEditingController _lowStockController;
   late final TextEditingController _costController;
   late final TextEditingController _tvaController;
   late final TextEditingController _priceAfterTvaController;
@@ -65,6 +66,8 @@ class _EditItemDialogState extends State<EditItemDialog> {
     _barcodeController = TextEditingController(text: p.barcode ?? '');
     _quantityController =
         TextEditingController(text: p.quantity?.toString() ?? '');
+    _lowStockController =
+        TextEditingController(text: p.lowStockWarning?.toString() ?? '');
     _costController = TextEditingController(text: _text(p.costPrice));
     _tvaController = TextEditingController(text: _text(p.tvaPercent));
     _priceAfterTvaController =
@@ -87,6 +90,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
     _nameController.dispose();
     _barcodeController.dispose();
     _quantityController.dispose();
+    _lowStockController.dispose();
     _costController.dispose();
     _tvaController.dispose();
     _priceAfterTvaController.dispose();
@@ -180,6 +184,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
       category: category,
       barcode: _barcodeController.text.trim(),
       quantity: int.tryParse(_quantityController.text.trim()) ?? 0,
+      lowStockWarning: int.tryParse(_lowStockController.text.trim()),
       costPrice: _read(_costController),
       tvaPercent: _read(_tvaController),
       priceAfterTva: _read(_priceAfterTvaController),
@@ -195,7 +200,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
     Navigator.of(context).pop(true);
   }
 
-  /// Two fields side by side; the form has nine, and stacked they would not
+  /// Two fields side by side; the form has ten, and stacked they would not
   /// fit on a tablet without scrolling.
   Widget _pair(Widget left, Widget right) {
     return Row(
@@ -227,26 +232,11 @@ class _EditItemDialogState extends State<EditItemDialog> {
                     label: 'Name',
                     hint: 'Enter item name',
                   ),
-                  Obx(
-                    () => FormDropdown<String>(
-                      value: _selectedCategory,
-                      items: [
-                        ..._controller.categories.map(
-                          (category) => DropdownMenuItem<String>(
-                            value: category,
-                            child: Text(category),
-                          ),
-                        ),
-                        const DropdownMenuItem<String>(
-                          value: _newCategoryOption,
-                          child: Text('+ New category'),
-                        ),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => _selectedCategory = value),
-                      label: 'Category',
-                      hint: 'Select category',
-                    ),
+                  CategoryDropdown(
+                    value: _selectedCategory,
+                    newCategoryOption: _newCategoryOption,
+                    onChanged: (value) =>
+                        setState(() => _selectedCategory = value),
                   ),
                 ),
                 if (_isCreatingCategory) ...[
@@ -258,17 +248,24 @@ class _EditItemDialogState extends State<EditItemDialog> {
                   ),
                 ],
                 Styles.verticalSpacer,
+                BarcodeInputField(
+                  controller: _barcodeController,
+                  label: 'Barcode',
+                  hint: 'Scan or type a barcode',
+                  validator: _validateBarcode,
+                ),
+                Styles.verticalSpacer,
                 _pair(
-                  BarcodeInputField(
-                    controller: _barcodeController,
-                    label: 'Barcode',
-                    hint: 'Scan or type a barcode',
-                    validator: _validateBarcode,
-                  ),
                   FormInputField(
                     controller: _quantityController,
                     label: 'Stock Quantity',
                     hint: 'Enter stock quantity',
+                    keyboardType: TextInputType.number,
+                  ),
+                  FormInputField(
+                    controller: _lowStockController,
+                    label: 'Low Stock Warning',
+                    hint: 'Warn at this stock level',
                     keyboardType: TextInputType.number,
                   ),
                 ),

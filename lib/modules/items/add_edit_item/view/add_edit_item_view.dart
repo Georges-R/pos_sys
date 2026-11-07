@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pos/custom_widgets/barcode_input_field/barcode_input_field.dart';
-import 'package:pos/custom_widgets/form_dropdown/form_dropdown.dart';
+import 'package:pos/custom_widgets/category_dropdown/category_dropdown.dart';
 import 'package:pos/custom_widgets/form_input_field/form_input_field.dart';
 import 'package:pos/custom_widgets/pos_button/pos_button.dart';
-import 'package:pos/modules/home_screen/controller/home_sceen_controller.dart';
 import 'package:pos/modules/items/add_edit_item/controller/add_edit_item_controller.dart';
 import 'package:pos/themes/styles/styles.dart';
 
@@ -36,25 +35,16 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       hint: 'Enter description',
                     ),
                     Styles.verticalSpacer,
-                    Obx(() {
-                      final homeController = Get.find<HomeSceenController>();
-                      return FormDropdown<String>(
+                    Obx(
+                      () => CategoryDropdown(
                         value: controller.selectedCategory.value,
-                        items: homeController.categories
-                            .map((category) => DropdownMenuItem<String>(
-                                  value: category,
-                                  child: Text(category),
-                                ))
-                            .toList(),
                         onChanged: (value) {
                           if (value != null) {
                             controller.selectedCategory.value = value;
                           }
                         },
-                        label: 'Category',
-                        hint: 'Select category',
-                      );
-                    }),
+                      ),
+                    ),
                     Styles.verticalSpacer,
                     BarcodeInputField(
                       controller: controller.barcodeController,
@@ -66,6 +56,14 @@ class AddEditItemView extends GetView<AddEditItemController> {
                       controller: controller.quantityController,
                       label: 'Quantity',
                       hint: 'Enter quantity',
+                      keyboardType: TextInputType.number,
+                      allowDecimal: false,
+                    ),
+                    Styles.verticalSpacer,
+                    FormInputField(
+                      controller: controller.lowStockWarningController,
+                      label: 'Low Stock Warning',
+                      hint: 'Warn when stock falls to this quantity',
                       keyboardType: TextInputType.number,
                       allowDecimal: false,
                     ),

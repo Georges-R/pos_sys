@@ -55,6 +55,15 @@ class CheckoutController extends GetxController {
     if (index < 0 || index >= cartItems.length) return;
     cartItems.removeAt(index);
     calculateTotals();
+
+    // Deleting the last line is the cashier emptying the basket, not backing
+    // out of checkout: leave an empty till behind and go back to it.
+    if (cartItems.isEmpty) {
+      if (Get.isRegistered<HomeSceenController>()) {
+        Get.find<HomeSceenController>().clearCart();
+      }
+      Get.back();
+    }
   }
 
   void updateQuantity(int index, int quantity) {

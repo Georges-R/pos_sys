@@ -81,24 +81,38 @@ class ListingItemsView extends GetView<HomeSceenController> {
                   final product = products[index];
                   return ListTile(
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     title: Text(
                       product.description ?? 'No Name',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    subtitle: Text(
-                      [
-                        if ((product.barcode ?? '').isNotEmpty)
-                          product.barcode!,
-                        'Stock: ${product.quantity ?? 0}',
-                      ].join('  ·  '),
-                      style: TextStyle(color: Colors.grey[600]),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        [
+                          if ((product.barcode ?? '').isNotEmpty)
+                            product.barcode!,
+                          'Stock: ${product.quantity ?? 0}',
+                          if (product.isLowOnStock) 'Low stock',
+                        ].join('  ·  '),
+                        style: product.isLowOnStock
+                            ? TextStyle(
+                                fontSize: 24,
+                                color: Theme.of(context).colorScheme.error,
+                                fontWeight: FontWeight.w600,
+                              )
+                            : TextStyle(fontSize: 24, color: Colors.grey[600]),
+                      ),
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           tooltip: 'Edit',
+                          iconSize: 36,
                           icon: const Icon(Icons.edit, color: Colors.blue),
                           onPressed: () => Get.toNamed(
                             Paths.addEditItemScreen,
@@ -107,6 +121,7 @@ class ListingItemsView extends GetView<HomeSceenController> {
                         ),
                         IconButton(
                           tooltip: 'Delete',
+                          iconSize: 36,
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () =>
                               _showDeleteProductDialog(context, product),

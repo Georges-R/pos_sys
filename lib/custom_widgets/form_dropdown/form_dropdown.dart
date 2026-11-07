@@ -4,8 +4,9 @@ import 'package:pos/themes/styles/styles.dart';
 class FormDropdown<T> extends StatelessWidget {
   final T? value;
   final List<DropdownMenuItem<T>> items;
+  final DropdownButtonBuilder? selectedItemBuilder;
   final void Function(T?)? onChanged;
-  final String? hint, label;
+  final String? hint, label, helper;
   final bool isRequired;
   final String? Function(T?)? validator;
 
@@ -13,8 +14,10 @@ class FormDropdown<T> extends StatelessWidget {
     super.key,
     required this.value,
     required this.items,
+    this.selectedItemBuilder,
     this.onChanged,
     this.hint,
+    this.helper,
     required this.label,
     this.isRequired = false,
     this.validator,
@@ -33,6 +36,7 @@ class FormDropdown<T> extends StatelessWidget {
         DropdownButtonFormField<T>(
           initialValue: value,
           items: items,
+          selectedItemBuilder: selectedItemBuilder,
           onChanged: onChanged,
           validator: validator ??
               (isRequired
@@ -41,6 +45,7 @@ class FormDropdown<T> extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: Styles.hintTextStyle,
+            helperText: helper,
             enabledBorder: const OutlineInputBorder(
               borderSide: BorderSide(color: Colors.grey),
             ),

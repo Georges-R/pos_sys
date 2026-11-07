@@ -251,10 +251,16 @@ class _HomeScreenViewState extends State<HomeScreenView> {
         itemCount: controller.cart.length,
         itemBuilder: (context, index) {
           final item = controller.cart[index];
+          // The line's quantity is the count being sold; the stock and its
+          // warning level live on the catalog row.
+          final product = controller.catalogProductFor(item);
           return OrderItemCard(
             productName: item.description ?? '',
             quantity: item.quantity ?? 0,
             unitPrice: item.sellingPrice ?? 0,
+            lowStockLeft: product != null && product.isLowOnStock
+                ? product.quantity ?? 0
+                : null,
             onIncrease: () {
               controller.updateQuantity(index, 1);
               _refocusScanner();

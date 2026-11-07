@@ -18,6 +18,7 @@ class AddEditItemController extends BaseFormGetxController {
   late TextEditingController descriptionController,
       barcodeController,
       quantityController,
+      lowStockWarningController,
       costPriceController,
       tvaPercentController,
       priceAfterTvaController,
@@ -52,6 +53,7 @@ class AddEditItemController extends BaseFormGetxController {
     descriptionController.dispose();
     barcodeController.dispose();
     quantityController.dispose();
+    lowStockWarningController.dispose();
     costPriceController.dispose();
     tvaPercentController.dispose();
     priceAfterTvaController.dispose();
@@ -101,6 +103,7 @@ class AddEditItemController extends BaseFormGetxController {
     descriptionController = TextEditingController();
     barcodeController = TextEditingController();
     quantityController = TextEditingController();
+    lowStockWarningController = TextEditingController();
     costPriceController = TextEditingController();
     tvaPercentController = TextEditingController();
     priceAfterTvaController = TextEditingController();
@@ -115,6 +118,7 @@ class AddEditItemController extends BaseFormGetxController {
       category: selectedCategory.value,
       barcode: barcodeController.text,
       quantity: int.tryParse(quantityController.text),
+      lowStockWarning: int.tryParse(lowStockWarningController.text),
       costPrice: double.tryParse(costPriceController.text),
       tvaPercent: double.tryParse(tvaPercentController.text),
       priceAfterTva: double.tryParse(priceAfterTvaController.text),
@@ -167,6 +171,7 @@ class AddEditItemController extends BaseFormGetxController {
     descriptionController.text = item.description ?? '';
     barcodeController.text = item.barcode ?? '';
     quantityController.text = item.quantity?.toString() ?? '';
+    lowStockWarningController.text = item.lowStockWarning?.toString() ?? '';
     costPriceController.text = item.costPrice?.toString() ?? '';
     tvaPercentController.text = item.tvaPercent?.toString() ?? '';
     priceAfterTvaController.text = item.priceAfterTva?.toString() ?? '';

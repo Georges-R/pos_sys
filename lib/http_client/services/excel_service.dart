@@ -158,6 +158,7 @@ class ExcelService {
         'Category',
         'Barcode',
         'Quantity',
+        'Low Stock Warning',
         'Cost Price',
         'TVA Percent',
         'Price After TVA',
@@ -178,6 +179,7 @@ class ExcelService {
               product['category'] ?? '',
               product['barcode'] ?? '',
               product['quantity'] ?? 0,
+              product['low_stock_warning'] ?? '',
               product['cost_price'] ?? 0.0,
               product['tva_percent'] ?? 0.0,
               product['price_after_tva'] ?? 0.0,
@@ -343,6 +345,10 @@ class ExcelService {
           'category': category,
           'barcode': _getCellString(_cell(row, header, 'Barcode')),
           'quantity': _parseInt(_cell(row, header, 'Quantity')?.toString()),
+          // Blank means no warning, not a warning at zero; backups made
+          // before the column existed have no cell for it at all.
+          'low_stock_warning':
+              _parseOptionalInt(_cell(row, header, 'Low Stock Warning')),
           'cost_price':
               _parseDouble(_cell(row, header, 'Cost Price')?.toString()),
           'tva_percent':
@@ -421,6 +427,12 @@ class ExcelService {
   static int? _parseInt(String? value) {
     if (value == null || value.isEmpty) return 0;
     return int.tryParse(value.trim()) ?? Money.parse(value).round();
+  }
+
+  static int? _parseOptionalInt(Object? value) {
+    final text = _getCellString(value);
+    if (text.isEmpty) return null;
+    return _parseInt(text);
   }
 
   static String _getCellString(Object? value) {
