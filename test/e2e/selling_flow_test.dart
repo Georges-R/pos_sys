@@ -533,4 +533,101 @@ void main() {
           reason: '10 x 0.10 must be exactly 1.00 on the receipt');
     });
   });
+
+  group('typing T and a price in LBP for an item with no barcode', () {
+    Finder scanner() => find.widgetWithText(TextField, 'Scan barcode here');
+
+    Future<HomeSceenController> type(WidgetTester tester, String code,
+        {double exchangeRate = 89500, double tva = 0}) async {
+      final home = await openTill(tester, exchangeRate: exchangeRate, tva: tva);
+      await tester.enterText(scanner(), '$code\n');
+      await settle(tester);
+      return home;
+    }
+
+    testWidgets('rings it up at exactly that amount, without asking',
+        (tester) async {
+      final home = await type(tester, 'T250000');
+
+      expect(find.text('Item not found'), findsNothing);
+      expect(home.cart, hasLength(1));
+      expect(home.cart.single.priceLBP, 250000);
+      expect(home.totalLBP(89500), 250000,
+          reason: 'converting \$2.79 back would read 249,705 LBP');
+      expect(find.text('1 x 250,000 LBP'), findsOneWidget);
+      expect(home.allProducts, hasLength(3),
+          reason: 'a keyed-in price is a sale, not a new catalog item');
+    });
+
+    testWidgets('works with a lower-case t', (tester) async {
+      final home = await type(tester, 't150000');
+      expect(home.cart.single.priceLBP, 150000);
+    });
+
+    testWidgets('the same amount twice is one line of two', (tester) async {
+      final home = await type(tester, 'T250000');
+      await tester.enterText(scanner(), 'T250000\n');
+      await settle(tester);
+      await tester.enterText(scanner(), 'T250100\n');
+      await settle(tester);
+
+      expect(home.cart, hasLength(2),
+          reason: '250,000 and 250,100 round to the same cent but differ');
+      expect(home.cart.first.quantity, 2);
+      expect(home.totalLBP(89500), 750100);
+    });
+
+    testWidgets('adds to USD-priced items at the configured rate',
+        (tester) async {
+      final home = await type(tester, 'T250000');
+      home.addToCart(home.allProducts[1]); // Latte 4.00
+
+      expect(home.totalLBP(89500), 4.00 * 89500 + 250000);
+    });
+
+    testWidgets('checkout charges and records exactly that amount',
+        (tester) async {
+      final home = await type(tester, 'T250000');
+      final checkout = await goToCheckout(tester, home);
+      expect(checkout.totalLBP.value, 250000);
+
+      await withStorage(tester, checkout.payNow);
+      await settle(tester);
+
+      final sale = SalesService.getAllSales().values.first as Map;
+      expect(sale['totalLBP'], 250000);
+      expect((sale['items'] as List).single['price_lbp'], 250000);
+    });
+
+    testWidgets('VAT is added at checkout as for any other item',
+        (tester) async {
+      final home = await type(tester, 'T250000', tva: 11);
+      final checkout = await goToCheckout(tester, home);
+      expect(checkout.totalLBP.value, 277500);
+    });
+
+    testWidgets('a real barcode starting with T still finds its product',
+        (tester) async {
+      final home = await openTill(tester, exchangeRate: 89500);
+      home.allProducts.add(product(
+          description: 'Tea', category: 'Drinks', barcode: 'T100'));
+      await tester.enterText(scanner(), 'T100\n');
+      await settle(tester);
+
+      expect(home.cart.single.description, 'Tea');
+      expect(home.cart.single.priceLBP, isNull);
+    });
+
+    testWidgets('adds nothing without an exchange rate', (tester) async {
+      final home = await type(tester, 'T250000', exchangeRate: 0);
+      expect(home.cart, isEmpty);
+      expect(find.text('Item not found'), findsNothing);
+    });
+
+    testWidgets('adds nothing for T0', (tester) async {
+      final home = await type(tester, 'T0');
+      expect(home.cart, isEmpty);
+      expect(find.text('Item not found'), findsNothing);
+    });
+  });
 }

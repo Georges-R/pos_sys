@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class OrderItemCard extends StatelessWidget {
   const OrderItemCard({
@@ -6,6 +7,7 @@ class OrderItemCard extends StatelessWidget {
     required this.productName,
     required this.quantity,
     required this.unitPrice,
+    this.unitPriceLBP,
     this.onIncrease,
     this.onDecrease,
     this.onRemove,
@@ -18,6 +20,10 @@ class OrderItemCard extends StatelessWidget {
   final String productName;
   final int quantity;
   final double unitPrice;
+
+  /// Set when the line was keyed in in Lebanese pounds; the unit price and
+  /// line total are then shown in LBP, as the cashier typed them.
+  final double? unitPriceLBP;
   final VoidCallback? onIncrease;
   final VoidCallback? onDecrease;
   final VoidCallback? onRemove;
@@ -48,7 +54,14 @@ class OrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final total = quantity * unitPrice;
+    final unitPriceLBP = this.unitPriceLBP;
+    final lbp = NumberFormat('#,###');
+    final unitText = unitPriceLBP != null
+        ? '${lbp.format(unitPriceLBP)} LBP'
+        : '\$${unitPrice.toStringAsFixed(2)}';
+    final totalText = unitPriceLBP != null
+        ? '${lbp.format(quantity * unitPriceLBP)} LBP'
+        : '\$${(quantity * unitPrice).toStringAsFixed(2)}';
     final lowStockLeft = this.lowStockLeft;
     final isLowStock = lowStockLeft != null;
     final alert = theme.colorScheme.error;
@@ -98,7 +111,7 @@ class OrderItemCard extends StatelessWidget {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          '$quantity x \$${unitPrice.toStringAsFixed(2)}',
+                          '$quantity x $unitText',
                           maxLines: 1,
                           style: theme.textTheme.titleMedium?.copyWith(
                             color:
@@ -142,7 +155,7 @@ class OrderItemCard extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '\$${total.toStringAsFixed(2)}',
+                      totalText,
                       maxLines: 1,
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: textColor,

@@ -97,6 +97,26 @@ void main() {
     expect(ClientsService.getClientStats(id)['openTabs'], 0);
   });
 
+  test('a converted tab leaves the open tabs list', () async {
+    final clients = openClients();
+    await addClient(clients, 'Zeina', '03555444');
+    final id = clients.clients.first['id'] as String;
+    await SalesService.saveTab(id, [], 25.0, 2250000.0, 90000.0, 0.0);
+    await SalesService.saveTab(id, [], 10.0, 900000.0, 90000.0, 0.0);
+    clients.loadClientTabs(id);
+    expect(clients.openTabsOf(id), hasLength(2));
+
+    final paid = clients.openTabsOf(id).first['id'] as String;
+    await SalesService.markTabAsPaid(paid);
+    clients.loadClientTabs(id);
+
+    expect(clients.openTabsOf(id), hasLength(1),
+        reason: 'a tab converted to a sale is no longer owed');
+    expect(clients.openTabsOf(id).single['id'], isNot(paid));
+    expect(clients.statsOf(id)['totalTabs'], 2,
+        reason: 'the paid tab is still part of the history');
+  });
+
   test('searching finds a customer by name and by phone', () async {
     final clients = openClients();
     await addClient(clients, 'Rita', '03111222');

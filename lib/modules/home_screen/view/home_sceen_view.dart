@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:pos/core/helpers/lbp_price.dart';
 import 'package:pos/core/helpers/notify.dart';
 import 'package:intl/intl.dart';
 import 'package:pos/core/routes/paths.dart';
@@ -88,7 +89,30 @@ class _HomeScreenViewState extends State<HomeScreenView> {
       _refocusScanner();
       return;
     }
+    // Checked after the catalog, so a real barcode that happens to start
+    // with T still finds its product.
+    final amountLBP = LbpPrice.parseCode(code);
+    if (amountLBP != null) {
+      _ringUpLbpPrice(amountLBP);
+      return;
+    }
     await _offerToCreateProduct(code);
+  }
+
+  /// "T250000" sells an item with no barcode for 250,000 LL.
+  void _ringUpLbpPrice(double amountLBP) {
+    final rate = settingsController.exchangeRate.value;
+    if (rate <= 0) {
+      Notify.error('Exchange rate not set',
+          'Set the exchange rate in Settings before selling in LBP');
+    } else if (amountLBP <= 0) {
+      Notify.error('No price', 'Type the price in LBP after T, e.g. T250000');
+    } else {
+      final linesBefore = controller.cart.length;
+      controller.addLbpPricedItem(amountLBP, rate);
+      if (controller.cart.length > linesBefore) _scrollCartToEnd();
+    }
+    _refocusScanner();
   }
 
   /// A code that matches nothing is usually a product the shop has started
@@ -258,6 +282,7 @@ class _HomeScreenViewState extends State<HomeScreenView> {
             productName: item.description ?? '',
             quantity: item.quantity ?? 0,
             unitPrice: item.sellingPrice ?? 0,
+            unitPriceLBP: item.priceLBP,
             lowStockLeft: product != null && product.isLowOnStock
                 ? product.quantity ?? 0
                 : null,
@@ -273,7 +298,9 @@ class _HomeScreenViewState extends State<HomeScreenView> {
               controller.removeItem(index);
               _refocusScanner();
             },
-            onLongPress: () => _editCartItem(item),
+            // A line keyed in in LBP has no catalog row to edit.
+            onLongPress:
+                item.priceLBP != null ? null : () => _editCartItem(item),
           );
         },
       );
@@ -319,8 +346,10 @@ class _HomeScreenViewState extends State<HomeScreenView> {
             },
           ),
         ),
+        // The totals fill all the height between the scanner and Checkout;
+        // the amounts are sized to that space, so it never scrolls.
         Expanded(
-          child: SingleChildScrollView(
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Obx(() {
               final rate = settingsController.exchangeRate.value;
@@ -328,8 +357,9 @@ class _HomeScreenViewState extends State<HomeScreenView> {
                   .fold<int>(0, (sum, item) => sum + (item.quantity ?? 0));
               return TotalsTiles(
                 totalUSD: controller.total,
-                totalLBP: controller.total * rate,
-                amountSize: 96,
+                totalLBP: controller.totalLBP(rate),
+                expand: true,
+                amountSize: 140,
                 // One above the other at any width.
                 stackBelowWidth: double.infinity,
                 usdFootnote: count == 1 ? '1 item' : '$count items',

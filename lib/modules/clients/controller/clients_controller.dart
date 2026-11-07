@@ -23,6 +23,16 @@ class ClientsController extends GetxController {
   Map<String, dynamic> tabsOf(String clientId) =>
       tabsByClient[clientId] ?? const <String, dynamic>{};
 
+  /// The tabs the customer still owes on. Paid tabs stay in the ledger for
+  /// the sales history, but listing them here meant a converted tab never
+  /// left the panel, so converting looked like it had done nothing.
+  List<Map<String, dynamic>> openTabsOf(String clientId) => tabsOf(clientId)
+      .values
+      .whereType<Map>()
+      .where((tab) => tab['status'] == 'open')
+      .map((tab) => Map<String, dynamic>.from(tab))
+      .toList();
+
   Map<String, dynamic> statsOf(String clientId) =>
       statsByClient[clientId] ??
       const <String, dynamic>{
@@ -67,11 +77,22 @@ class ClientsController extends GetxController {
     }
   }
 
+  /// Reloads every panel that has been opened. Reloading only
+  /// [selectedClientId] refreshed whichever customer was expanded last, not
+  /// necessarily the one whose tab just changed.
+  void _refreshLedger() {
+    for (final clientId in tabsByClient.keys.toList()) {
+      tabsByClient[clientId] = SalesService.getClientTabs(clientId);
+      statsByClient[clientId] = ClientsService.getClientStats(clientId);
+    }
+    ledgerRevision.value++;
+  }
+
   Future<void> deleteTab(String tabId) async {
+    if (tabId.isEmpty) return;
     try {
       await SalesService.deleteTab(tabId);
-      loadClientTabs(selectedClientId.value);
-      ledgerRevision.value++;
+      _refreshLedger();
       Notify.success('Success', 'Tab deleted successfully');
     } catch (e) {
       Notify.error('Error', 'Failed to delete tab: $e');
@@ -79,10 +100,10 @@ class ClientsController extends GetxController {
   }
 
   Future<void> convertTabToSale(String tabId) async {
+    if (tabId.isEmpty) return;
     try {
       await SalesService.markTabAsPaid(tabId);
-      loadClientTabs(selectedClientId.value);
-      ledgerRevision.value++;
+      _refreshLedger();
       Notify.success('Success', 'Tab converted to sale');
     } catch (e) {
       Notify.error('Error', 'Failed to convert tab: $e');

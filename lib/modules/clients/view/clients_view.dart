@@ -49,8 +49,6 @@ class ClientsView extends GetView<ClientsController> {
                     );
                   }
 
-                  final balance = controller.getClientBalance(clientId);
-
                   return Card(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -65,13 +63,20 @@ class ClientsView extends GetView<ClientsController> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(client['phone'] ?? 'No phone'),
-                          Text(
-                            'Balance: \$${balance.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              color: balance > 0 ? Colors.red : Colors.green,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          // Rows are built lazily by the list, outside the
+                          // outer Obx, so the balance needs its own Obx to
+                          // pick up ledgerRevision and update on its own.
+                          Obx(() {
+                            final balance =
+                                controller.getClientBalance(clientId);
+                            return Text(
+                              'Balance: \$${balance.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: balance > 0 ? Colors.red : Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          }),
                         ],
                       ),
                       leading: const Icon(Icons.person),
@@ -128,7 +133,7 @@ class ClientsView extends GetView<ClientsController> {
                                 const Divider(),
                                 const SizedBox(height: 8),
                                 // Tabs List
-                                if (controller.tabsOf(clientId).isEmpty)
+                                if (controller.openTabsOf(clientId).isEmpty)
                                   const Text('No open tabs')
                                 else
                                   ListView.builder(
@@ -136,28 +141,14 @@ class ClientsView extends GetView<ClientsController> {
                                     physics:
                                         const NeverScrollableScrollPhysics(),
                                     itemCount:
-                                        controller.tabsOf(clientId).length,
+                                        controller.openTabsOf(clientId).length,
                                     itemBuilder: (context, tabIndex) {
-                                      final values = controller
-                                          .tabsOf(clientId)
-                                          .values
-                                          .toList();
-
                                       // This used to index with the client's
                                       // row number, which showed the wrong tab
                                       // and crashed for every client past the
                                       // first.
-                                      final tab = values[tabIndex];
-
-                                      if (tab == null) {
-                                        return const Card(
-                                          child: ListTile(
-                                            title: Text('Invalid Tab Data'),
-                                            subtitle: Text(
-                                                'Tab information is missing'),
-                                          ),
-                                        );
-                                      }
+                                      final tab = controller
+                                          .openTabsOf(clientId)[tabIndex];
 
                                       return Card(
                                         child: ListTile(

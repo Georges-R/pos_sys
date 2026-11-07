@@ -37,7 +37,9 @@ class CheckoutView extends GetView<CheckoutController> {
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'Price: \$${item.sellingPrice} x ${item.quantity}',
+                              item.priceLBP != null
+                                  ? 'Price: ${NumberFormat('#,###').format(item.priceLBP)} LBP x ${item.quantity}'
+                                  : 'Price: \$${item.sellingPrice} x ${item.quantity}',
                               style: const TextStyle(
                                 fontSize: 24,
                               ),

@@ -7,6 +7,13 @@ class AddEditItemModel {
   int? lowStockWarning;
   double? costPrice, tvaPercent, priceAfterTva, profitPercent, sellingPrice;
 
+  /// The price in Lebanese pounds, set only on a cart line rung up by typing
+  /// "T" and an amount at the till for an item with no barcode. Such a line
+  /// still carries its USD equivalent in [sellingPrice], but the LL amount is
+  /// what the customer was quoted: converting back from USD rounded to the
+  /// cent would turn 250,000 LL into 249,705 LL.
+  double? priceLBP;
+
   AddEditItemModel({
     this.description,
     this.category,
@@ -18,6 +25,7 @@ class AddEditItemModel {
     this.priceAfterTva,
     this.profitPercent,
     this.sellingPrice,
+    this.priceLBP,
   });
 
   factory AddEditItemModel.fromJson(Map<String, dynamic> json) {
@@ -46,6 +54,9 @@ class AddEditItemModel {
       sellingPrice: json['selling_price'] != null
           ? double.tryParse(json['selling_price'].toString())
           : null,
+      priceLBP: json['price_lbp'] != null
+          ? double.tryParse(json['price_lbp'].toString())
+          : null,
     );
   }
 
@@ -61,6 +72,7 @@ class AddEditItemModel {
       'price_after_tva': priceAfterTva,
       'profit_percent': profitPercent,
       'selling_price': sellingPrice,
+      if (priceLBP != null) 'price_lbp': priceLBP,
     };
   }
 
@@ -71,6 +83,10 @@ class AddEditItemModel {
   /// that happen to share a name — a common case when the same article comes
   /// from two suppliers at two prices.
   String get identityKey {
+    // Two lines keyed in at the same LL amount are the same thing sold twice;
+    // at different amounts they are different items, even where both round
+    // to the same USD cent.
+    if (priceLBP != null) return 'lbp:$priceLBP';
     final code = barcode?.trim() ?? '';
     if (code.isNotEmpty) return 'barcode:$code';
     return 'item:${description?.trim()}|${category?.trim()}|$sellingPrice';

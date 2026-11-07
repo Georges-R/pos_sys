@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
+import 'package:pos/core/helpers/lbp_price.dart';
 import 'package:pos/core/helpers/money.dart';
 import 'package:pos/http_client/local_storage/local_storage_helpers.dart';
 
@@ -111,6 +112,27 @@ class HomeSceenController extends GetxController {
 
   double get total => Money.round(cart.fold<double>(0.0,
       (sum, item) => sum + (item.quantity ?? 0) * (item.sellingPrice ?? 0)));
+
+  /// The cart total in Lebanese pounds at [exchangeRate]. Lines keyed in in
+  /// LL count at the amount typed, not at their USD equivalent converted back.
+  double totalLBP(double exchangeRate) =>
+      LbpPrice.cartTotal(cart, exchangeRate);
+
+  /// Rings up an item that has no barcode at [amountLBP] Lebanese pounds, as
+  /// typed at the till ("T250000"). The line carries its USD equivalent at
+  /// [exchangeRate] so USD totals and the sales ledger include it; it is not
+  /// added to the catalog. Ringing up the same amount again adds one to that
+  /// line.
+  ///
+  /// Does nothing unless both the amount and the rate are above zero.
+  void addLbpPricedItem(double amountLBP, double exchangeRate) {
+    if (amountLBP <= 0 || exchangeRate <= 0) return;
+    addToCart(AddEditItemModel(
+      description: 'Item without barcode',
+      priceLBP: amountLBP,
+      sellingPrice: amountLBP / exchangeRate,
+    ));
+  }
 
   /// With no category chosen the till shows the whole catalog. Filtering on an
   /// empty category matched nothing, so the grid opened blank.

@@ -1,6 +1,7 @@
 import 'dart:developer';
 import 'package:get/get.dart';
 import 'package:pos/core/helpers/notify.dart';
+import 'package:pos/core/helpers/lbp_price.dart';
 import 'package:pos/core/helpers/money.dart';
 import 'package:pos/core/routes/paths.dart';
 import 'package:pos/http_client/data/models/items/add_edit_items_model.dart';
@@ -85,8 +86,9 @@ class CheckoutController extends GetxController {
     final rate = tva.value <= 0 ? 0.0 : tva.value / 100;
     tvaAmountUSD.value = Money.round(subtotalUSD.value * rate);
     totalUSD.value = Money.round(subtotalUSD.value + tvaAmountUSD.value);
-    totalLBP.value =
-        Money.round(totalUSD.value * exchangeRate.value, decimals: 0);
+    // Lines keyed in in LBP ("T250000") count at the amount typed.
+    totalLBP.value = LbpPrice.cartTotal(cartItems, exchangeRate.value,
+        tvaPercent: tva.value);
     remainingAmount.value = totalUSD.value;
   }
 
